@@ -1,7 +1,7 @@
 ---
 document: LLD
 product: Jyotech Agent
-version: 1.1
+version: 1.2
 aligned_to_hld: 1.0
 aligned_to_prd: 1.0
 status: Approved
@@ -31,7 +31,7 @@ docs/                    # this folder
 
 | ID | Item | Implements |
 |---|---|---|
-| LLD-DB-01 | Schemas `facts`, `vec`, `staging`, `ops` created by Alembic migration `0001_init`. Tables and columns exactly as `design/data-model.md` §2–3. | HLD-001 |
+| LLD-DB-01 | Migration `0000_bootstrap` creates the `vector` extension and the four empty schemas `facts`, `vec`, `staging`, `ops` (with working downgrade); migration `0001_init` then creates all tables and columns exactly as `design/data-model.md` §2–3. Extension and schema state live in migrations only — never in docker init SQL. | HLD-001 |
 | LLD-DB-02 | `facts.*` tables carry `release_id`; a view `facts.active_*` per table filters to `release.is_active = true`. Tools read only the views. | HLD-001, HLD-C-05 |
 | LLD-DB-03 | `vec.chunk_embedding_<release>` created per release by the embedder; HNSW index `vector_cosine_ops`, `m=16, ef_construction=128`. | HLD-C-04 |
 | LLD-DB-04 | `ops.message` has `turn_id` FK, `seq_in_turn`, `kind ∈ {text, document_card, status, form}`; a turn owns 1..n messages in either role. | HLD-C-06 |
@@ -151,5 +151,6 @@ Each agent = prompt (from `ops.prompt_version`) + allowed tool list + output sch
 
 | Version | Date | CR | Aligned to HLD / PRD | Summary |
 |---|---|---|---|---|
+| 1.2 | 2026-08-24 | — (clarification) | 1.0 / 1.0 | LLD-DB-01: `0000_bootstrap` migration (vector extension + empty schemas) precedes `0001_init`; DB state lives in migrations, not docker init SQL. Confirmed in Step 0. |
 | 1.1 | 2026-08-24 | — (clarification) | 1.0 / 1.0 | LLD-RET-01/02: explicit embed context (`num_ctx`), loud `ChunkTooLargeError` instead of silent truncation, table-split rule, truncation-canary golden question. No requirement or HLD change. |
 | 1.0 | 2026-08-22 | — | 1.0 / 1.0 | Initial LLD |
