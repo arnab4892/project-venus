@@ -1,7 +1,7 @@
 ---
 document: LLD
 product: Jyotech Agent
-version: 1.3
+version: 1.4
 aligned_to_hld: 1.0
 aligned_to_prd: 1.0
 status: Approved
@@ -43,11 +43,12 @@ docs/                    # this folder
 
 | ID | Item |
 |---|---|
-| LLD-ING-01 | Seeds from `clients/jyotech/seeds/sources.yaml`: 11 HTML URLs + 2 PDF URLs. Same-host crawl, depth 2, follows `.html/.php/.pdf`. |
-| LLD-ING-02 | HTML: strip nav/footer/scripts via a per-client CSS selector list; keep headings, paragraphs, tables, image alt. |
-| LLD-ING-03 | PDF: Docling `DocumentConverter` with table structure on; OCR enabled only for pages where text density < 50 chars/page. |
+| LLD-ING-01 | The shipped crawler is driven by `clients/jyotech/seeds/sources.yaml`: the full discovered source list (27 HTML/PHP pages + 2 PDF URLs as of 2026-08; the homepage primary nav carries 11 links, which was the earlier design-time count) plus an explicit `exclude:` list — exclusions are content-based, human-decided config, never filename-based. The seed list was bootstrapped by a one-time same-host depth-2 crawl following `.html/.php/.pdf`; a future `ingest discover` may regenerate it. Two live URLs contain literal spaces and one PDF name contains `&` — stored percent-encoded. |
+| LLD-ING-02 | HTML: strip chrome via a per-client CSS selector list (incl. breadcrumbs and teaser-card sections) and per-client `drop_alt_text` / `drop_link_text` values for placeholder stubs ("Image", "Read More", "Responsive Image"); skip HTML comment nodes; keep headings, paragraphs, tables (→ pipe tables), meaningful image alt, absolutised PDF links. Generic rules live in code; selectors/values are client config. |
+| LLD-ING-03 | PDF: Docling `DocumentConverter` with the **PyPdfiumDocumentBackend** (the default DoclingParse backend clips right-edge words), table structure on with `TableFormerMode.ACCURATE` and `do_cell_matching=False`; Markdown escaping off; OCR only for pages with text density < 50 chars/page. `tidy_markdown` collapses consecutive `<!-- image -->` placeholders and drops orphan single-character lines (table rows preserved). Tables whose data exists only as raster images are not reconstructable and are recorded in the report as published-as-image. |
 | LLD-ING-04 | Output `data/<client>/md/<sha256>.md` with `<!-- page N -->` markers and front-matter `{url, kind, sha256, fetched_at, title}`. Idempotent on hash. |
-| LLD-ING-05 | A `facts.document`/`staging.document` row per source. |
+| LLD-ING-05 | One `staging.document` row per source URL (byte-identical duplicate URLs share one converted file but each keeps its row), upserted under a per-client bootstrap RC id (`rc.<client>.bootstrap`, `--rc` overridable); `facts.document` is written only by release promotion. RC lifecycle is owned by LLD-REL. |
+| LLD-ING-06 | `agentkit ingest verify` — mandatory post-ingest verifier and release precondition. PDF sources: an independent `pdftotext` (poppler) witness over the cached raw bytes yields a token multiset (numbers; units `Nm3/hr|lpm|Bar|Barg|kW|HP`; standards `API-618|ISO n:n|EN|NFPA`; models `MCH-*|ICON|VEGA|NOVA|NEPTUNE|PROEYE`) and every witness token must appear in the converted Markdown — image-only content is invisible to both sides, keeping the check honest. HTML sources: assert none of the banned junk patterns remain. Per-source PASS or exact missing tokens; non-zero exit on any failure. `ingest run` caches raw bytes to `data/<client>/raw/<sha>` and writes `data/<client>/ingest-manifest.json` to support offline verification. System dependency: poppler `pdftotext` (macOS `brew install poppler`; Linux `apt install poppler-utils`). |
 
 ## 3. Extractor (LLD-EXT) — implements HLD-C-02
 
@@ -81,6 +82,7 @@ docs/                    # this folder
 | LLD-RET-01 | Chunk by heading, target 400–600 tokens, 60-token overlap; a table is kept whole unless it would exceed the embed limit, in which case it is split by rows with the header row repeated in every part; `family_ids` tagged from the frozen family list by name match + extractor output. |
 | LLD-RET-02 | Embedding model `bge-m3` (1024-d) via `EMBED_BASE_URL`; batch 64. The embedder MUST (a) set the provider context window explicitly per request (for Ollama: `num_ctx`, ≥ max chunk tokens + margin), (b) count tokens per chunk and raise `ChunkTooLargeError` if `token_count ≥ embed_limit` — never rely on provider-side silent truncation, and (c) log the effective limit at startup. One golden question (LLD-EVAL-01) must target content at the END of the longest chunk as a truncation canary. |
 | LLD-RET-03 | Hybrid retrieval: cosine top-20 ∪ FTS top-20 → reciprocal rank fusion → top-k (k=5), with SQL pre-filter on `division` and `family_ids && :families`. |
+| LLD-RET-04 | (Design note — to be implemented in the chunking milestone.) Per-document chunking disposition `chunk / reference_only / excluded`: computed by junk heuristics (substantive word count after dropping headings/link-stubs/boilerplate; link-to-text ratio; fraction of paragraphs duplicated elsewhere in the corpus), overridable per document in sources.yaml, every non-`chunk` decision listed in the release report for human approval. `reference_only` keeps the document row and extracted facts but produces no chunks (e.g. the catalogue link-hub page). Plus corpus-wide paragraph-level dedup at chunk time: a normalised paragraph appearing in multiple documents is chunked once from a canonical source (prefer PDF/about page) and skipped elsewhere. |
 
 ## 6. Tool layer (LLD-TOOL) — implements HLD-C-05
 
@@ -152,6 +154,7 @@ Each agent = prompt (from `ops.prompt_version`) + allowed tool list + output sch
 
 | Version | Date | CR | Aligned to HLD / PRD | Summary |
 |---|---|---|---|---|
+| 1.4 | 2026-08-23 | — (clarification, from milestone-2-notes) | 1.0 / 1.0 | Ingestion as built: sources.yaml-driven crawl with content-based excludes (LLD-ING-01), cleaner rules (ING-02), pypdfium backend + ACCURATE tables + tidy pass (ING-03), staging-only writes under bootstrap RC (ING-05), new LLD-ING-06 `ingest verify` (pdftotext witness; poppler dependency). New LLD-RET-04 design note: chunking disposition + paragraph dedup. |
 | 1.3 | 2026-08-23 | — (clarification, from milestone-1-notes) | 1.0 / 1.0 | Implemented decisions folded in: composite keying + one-active-release index + views-only rule (LLD-DB-02); staging scope = seven content tables, no cross-table FKs (LLD-DB-06); region_state as curated no-source fact table (new LLD-DB-07); headroom formula (LLD-TOOL-01); SCMD constant (LLD-EXT-09). |
 | 1.2 | 2026-08-23 | — (clarification) | 1.0 / 1.0 | LLD-DB-01: `0000_bootstrap` migration (vector extension + empty schemas) precedes `0001_init`; DB state lives in migrations, not docker init SQL. Confirmed in Step 0. |
 | 1.1 | 2026-08-23 | — (clarification) | 1.0 / 1.0 | LLD-RET-01/02: explicit embed context (`num_ctx`), loud `ChunkTooLargeError` instead of silent truncation, table-split rule, truncation-canary golden question. No requirement or HLD change. |

@@ -1,43 +1,31 @@
 # Jyotech Agent
 
-Customer-facing agentic chatbot for Jyotech Engineering, built on Nyalazone's
-reusable RAG-agent framework (`agentkit`). See `docs/` for the PRD → HLD → LLD
-chain; `docs/design/` holds the authoritative flows and data model.
+Customer-facing agentic chatbot for Jyotech Engineering (jyotech.com), built on Nyalazone's reusable RAG-agent framework. Design documents in `docs/` are the source of truth — start with `docs/README.md` for the PRD → HLD → LLD process.
 
-## Quick start (local skeleton)
+## Setup
 
-Requires Docker and Python 3.12.
+Requirements: Python 3.12, Docker (Postgres 16 + pgvector via `docker-compose.yml`), Ollama serving the chat and embedding models, and **poppler** for the ingestion verifier (`agentkit ingest verify` shells out to `pdftotext`):
 
 ```bash
-# 1. Postgres 16 + pgvector on host port 5433 (non-standard, avoids clashes)
-docker compose up -d db
+brew install poppler          # macOS
+# apt install poppler-utils   # Linux / CI
+```
 
-# 2. Install the framework + dev tools
-python -m venv .venv && source .venv/bin/activate
+```bash
+cp .env.example .env          # fill in endpoints; never commit .env
+docker compose up -d
 pip install -e ".[dev]"
-
-# 3. Point at your local DB (defaults already match docker-compose)
-cp .env.example .env
-
-# 4. Run migrations — creates the vector extension + facts/vec/staging/ops schemas
 agentkit db upgrade
-agentkit db current
-```
-
-At this milestone the database holds only the four (empty) schemas and the
-`vector` extension; the tables from `docs/design/data-model.md` arrive with
-migration `0001_init`.
-
-### CLI
-
-```
-agentkit db upgrade [--revision head]   # apply migrations
-agentkit db downgrade <revision>        # revert (e.g. `base`)
-agentkit db current                     # show applied revision
-```
-
-### Tests
-
-```bash
+agentkit seed demo
 pytest -q
 ```
+
+## Everyday commands
+
+```bash
+agentkit ingest run jyotech       # crawl + convert website/PDFs to data/jyotech/md/
+agentkit ingest verify jyotech    # token-witness verification (requires poppler)
+agentkit tools match-capability --gas hydrogen --capacity 3000 --unit Nm3/hr --discharge-p 350 --oil-free
+```
+
+Converted Markdown, raw source bytes and the ingest manifest live under `data/` (gitignored). Never hand-edit files in `data/` — fix the converter or a patch in `clients/jyotech/patches/` and re-run.
