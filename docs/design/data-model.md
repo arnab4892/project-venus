@@ -39,6 +39,8 @@ erDiagram
 
 Produced by the ingestion pipeline, reviewed once, tagged with a `release_id`. The runtime reads only the release marked `is_active`.
 
+> **Keying rule.** Every `facts.*` table carries `release_id`, and its primary key is the composite `(natural_id, release_id)` (`capability_gas` is `(cap_id, release_id, gas)`). All intra-`facts` foreign keys are composite and same-release — e.g. `product.(family_id, release_id) → product_family`. This lets an old and a new release coexist so `release promote`/`rollback` (LLD-REL-05) can flip which one is live. Exactly one `release.is_active` is true (enforced by a partial unique index). A `facts.active_<table>` view per table selects the natural ids of the active release, and **the tool layer reads only those views** — no code outside the release module filters on `release_id`. The sample tables below show single-column PKs and natural ids for readability; that is the shape seen *through* the `active_*` views.
+
 ### 2.1 `facts.release`
 
 | column | type | notes |
@@ -83,6 +85,7 @@ fam.asp              | industrial  | Process Engineering              | Air Sepa
 fam.mch_bac          | fire_rescue | Breathing Air Compressors        | MCH Series Breathing Air Compressor | {EN 12021}             | doc.fs        | §Breathing Air Compressors
 fam.lifting_bags     | fire_rescue | Rescue Equipment                 | Air Lifting Bags             | {}                            | doc.fs        | §Air Lifting Bags
 fam.scba             | fire_rescue | PPE                              | Self-Contained Breathing Apparatus | {}                      | doc.fs        | §PPE
+fam.search_eq        | fire_rescue | Search & Rescue                  | Search Cameras & Life Detectors | {}                         | doc.fs        | §Search & Rescue
 fam.diving_masks     | diving      | Diving Equipment                 | Full-Face Diving Masks       | {}                            | doc.fs        | §Diving
 ```
 
@@ -197,7 +200,11 @@ doc.process  | pdf      | Catalogue – Industrial Compressors & Process Eqpt   
 doc.fs       | pdf      | Catalogue – Fire Rescue & Diving Equipment          | https://www.jyotech.com/pdf/Jyotech%20Catalog%20-%20F&S.pdf     | fire_rescue | 9ab0… | n
 doc.about    | html     | About Us                                            | https://www.jyotech.com/about.html                     | all         | …        | 1
 doc.pgc      | html     | Process Gas Compressors                             | https://www.jyotech.com/process-gas-compressors.html   | industrial  | …        | 1
+doc.contact  | html     | Contact Us                                          | https://www.jyotech.com/contact.php                    | all         | …        | 1
+doc.index    | html     | Home                                                | https://www.jyotech.com/index.php                      | all         | …        | 1
 ```
+
+`company_fact` and `office` rows below reference these documents by `source_doc_id` (e.g. `about.html → doc.about`, `index.php → doc.index`, `contact.php → doc.contact`); the seed keeps the source set FK-closed.
 
 `facts.chunk`
 

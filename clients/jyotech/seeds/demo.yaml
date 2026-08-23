@@ -1,0 +1,416 @@
+# Jyotech demo seed — the ~40 fact rows from docs/design/data-model.md §2
+# (authoritative source: docs/design/data-model.html). Facts only; no ops rows.
+# Loaded by `agentkit seed demo` into facts.* under release r2026.08.1 (active).
+# release_id is injected by the loader for every table except `release` itself.
+
+release:
+  release_id: r2026.08.1
+  built_at: "2026-08-22T09:10:00+05:30"
+  is_active: true
+  notes: "first public-content build"
+  source_manifest:
+    pages: 11
+    pdfs:
+      - "PROCESS.pdf#sha256:4f1c…"
+      - "F&S.pdf#sha256:9ab0…"
+
+documents:
+  - doc_id: doc.process
+    kind: pdf
+    title: "Catalogue – Industrial Compressors & Process Engineering Eqpt"
+    url: "https://www.jyotech.com/pdf/Jyotech Catalog - PROCESS.pdf"
+    division: industrial
+    sha256: "4f1c…"
+    page_count: 1
+  - doc_id: doc.fs
+    kind: pdf
+    title: "Catalogue – Fire Rescue & Diving Equipment"
+    url: "https://www.jyotech.com/pdf/Jyotech Catalog - F&S.pdf"
+    division: fire_rescue
+    sha256: "9ab0…"
+    page_count: null
+  - doc_id: doc.about
+    kind: html
+    title: "About Us"
+    url: "https://www.jyotech.com/about.html"
+    division: all
+    sha256: "c21e…"
+    page_count: 1
+  - doc_id: doc.pgc
+    kind: html
+    title: "Process Gas Compressors"
+    url: "https://www.jyotech.com/process-gas-compressors.html"
+    division: industrial
+    sha256: "7d90…"
+    page_count: 1
+  - doc_id: doc.contact
+    kind: html
+    title: "Contact Us"
+    url: "https://www.jyotech.com/contact.php"
+    division: all
+    sha256: "e4a2…"
+    page_count: 1
+  - doc_id: doc.index
+    kind: html
+    title: "Home"
+    url: "https://www.jyotech.com/index.php"
+    division: all
+    sha256: "1b70…"
+    page_count: 1
+
+product_families:
+  - family_id: fam.oxygen_recip
+    division: industrial
+    category: "Process Gas Compressors"
+    name: "Oxygen Compressor"
+    summary: null
+    applications: ["steel", "ASU", "cylinder filling"]
+    standards: ["API-618 or equivalent"]
+    source_doc_id: doc.process
+    source_locator: "§Oxygen Compressors"
+  - family_id: fam.process_recip
+    division: industrial
+    category: "Process Gas Compressors"
+    name: "Process Gas Compressor"
+    summary: null
+    applications: ["refinery", "chemical", "fertiliser"]
+    standards: ["API-618 or equivalent"]
+    source_doc_id: doc.process
+    source_locator: "§Process Compressors"
+  - family_id: fam.natgas_hbo
+    division: industrial
+    category: "Process Gas Compressors"
+    name: "Natural Gas Compressor"
+    summary: null
+    applications: ["well head", "gas lift", "pipeline boosting"]
+    standards: ["API-11P", "ISO 13631"]
+    source_doc_id: doc.process
+    source_locator: "§Natural Gas Compressors"
+  - family_id: fam.diaphragm
+    division: industrial
+    category: "Process Gas Compressors"
+    name: "Diaphragm Compressor"
+    summary: null
+    applications: ["high-purity gases"]
+    standards: []
+    source_doc_id: doc.process
+    source_locator: "§Diaphragm"
+  - family_id: fam.cng_booster
+    division: industrial
+    category: "CNG / Bio-Gas Compressors"
+    name: "CNG & Bio-Gas Booster"
+    summary: null
+    applications: ["CGD", "self-fuelling"]
+    standards: []
+    source_doc_id: doc.process
+    source_locator: "§Self-fuelling"
+  - family_id: fam.h2_fuelling
+    division: industrial
+    category: "Hydrogen Compressors & Fuelling"
+    name: "Hydrogen Fuelling System"
+    summary: null
+    applications: ["H2 refuelling"]
+    standards: []
+    source_doc_id: doc.process
+    source_locator: "§Hydrogen"
+  - family_id: fam.asp
+    division: industrial
+    category: "Process Engineering"
+    name: "Air Separation Plant"
+    summary: null
+    applications: ["O2 / N2 generation"]
+    standards: []
+    source_doc_id: doc.process
+    source_locator: "§ASP"
+  - family_id: fam.mch_bac
+    division: fire_rescue
+    category: "Breathing Air Compressors"
+    name: "MCH Series Breathing Air Compressor"
+    summary: null
+    applications: ["fire stations", "diving", "industry"]
+    standards: ["EN 12021"]
+    source_doc_id: doc.fs
+    source_locator: "§Breathing Air Compressors"
+  - family_id: fam.lifting_bags
+    division: fire_rescue
+    category: "Rescue Equipment"
+    name: "Air Lifting Bags"
+    summary: null
+    applications: ["structural collapse", "vehicle rescue"]
+    standards: []
+    source_doc_id: doc.fs
+    source_locator: "§Air Lifting Bags"
+  - family_id: fam.scba
+    division: fire_rescue
+    category: "PPE"
+    name: "Self-Contained Breathing Apparatus"
+    summary: null
+    applications: ["fire", "hazmat"]
+    standards: []
+    source_doc_id: doc.fs
+    source_locator: "§PPE"
+  - family_id: fam.search_eq
+    division: fire_rescue
+    category: "Search & Rescue"
+    name: "Search Cameras & Life Detectors"
+    summary: null
+    applications: ["USAR", "mine rescue"]
+    standards: []
+    source_doc_id: doc.fs
+    source_locator: "§Search & Rescue"
+  - family_id: fam.diving_masks
+    division: diving
+    category: "Diving Equipment"
+    name: "Full-Face Diving Masks"
+    summary: null
+    applications: ["navy", "coast guard", "commercial diving"]
+    standards: []
+    source_doc_id: doc.fs
+    source_locator: "§Diving"
+
+products:
+  - product_id: prd.mch6
+    family_id: fam.mch_bac
+    model_name: "MCH-6"
+    variant: null
+    description: null
+    attributes: {portability: portable}
+    source_doc_id: doc.fs
+    source_locator: "§Breathing Air"
+  - product_id: prd.mch13_16
+    family_id: fam.mch_bac
+    model_name: "MCH-13/16"
+    variant: null
+    description: null
+    attributes: {}
+    source_doc_id: doc.fs
+    source_locator: "§Breathing Air"
+  - product_id: prd.mch21_23_smart
+    family_id: fam.mch_bac
+    model_name: "MCH-21/23"
+    variant: "SMART"
+    description: null
+    attributes: {}
+    source_doc_id: doc.fs
+    source_locator: "§Breathing Air"
+  - product_id: prd.mch_mark3
+    family_id: fam.mch_bac
+    model_name: "MCH"
+    variant: "MARK3 SILENT"
+    description: null
+    attributes: {}
+    source_doc_id: doc.fs
+    source_locator: "§Breathing Air"
+  - product_id: prd.bag_vega
+    family_id: fam.lifting_bags
+    model_name: "VEGA"
+    variant: "high pressure"
+    description: null
+    attributes: {spec_table: true}
+    source_doc_id: doc.fs
+    source_locator: "§Air Lifting Bags"
+  - product_id: prd.bag_nova
+    family_id: fam.lifting_bags
+    model_name: "NOVA"
+    variant: "low pressure"
+    description: null
+    attributes: {spec_table: true}
+    source_doc_id: doc.fs
+    source_locator: "§Air Lifting Bags"
+  - product_id: prd.neptune3
+    family_id: fam.diving_masks
+    model_name: "NEPTUNE III"
+    variant: null
+    description: null
+    attributes: {}
+    source_doc_id: doc.fs
+    source_locator: "§Diving"
+  - product_id: prd.proeye951
+    family_id: fam.search_eq
+    model_name: "PROEYE 951.S"
+    variant: "951.S.IN"
+    description: null
+    attributes: {}
+    source_doc_id: doc.fs
+    source_locator: "§Search & Rescue"
+
+capability_rows:
+  - cap_id: cap.001
+    family_id: fam.oxygen_recip
+    comp_type: "reciprocating, vertical/V/W/horizontal"
+    lubricated: false
+    cooling: water
+    capacity_min: null
+    capacity_max: 20000
+    capacity_unit: "Nm3/hr"
+    discharge_p_min: null
+    discharge_p_max: 50
+    pressure_unit: barg
+    driver: ["electric motor"]
+    standards: ["API-618 or equivalent"]
+    source_doc_id: doc.process
+    source_locator: "§Oxygen Compressors"
+    gases: ["oxygen"]
+  - cap_id: cap.002
+    family_id: fam.process_recip
+    comp_type: "reciprocating, vertical/V/W/horizontal"
+    lubricated: false
+    cooling: water
+    capacity_min: null
+    capacity_max: 20000
+    capacity_unit: "Nm3/hr"
+    discharge_p_min: null
+    discharge_p_max: 1000
+    pressure_unit: barg
+    driver: ["electric motor"]
+    standards: ["API-618 or equivalent"]
+    source_doc_id: doc.process
+    source_locator: "§Process Compressors"
+    gases: ["hydrogen", "hydrocarbon gas", "natural gas", "BOG", "mixed gas"]
+  - cap_id: cap.003
+    family_id: fam.natgas_hbo
+    comp_type: "reciprocating, horizontal balanced-opposed"
+    lubricated: true
+    cooling: air
+    capacity_min: 10000
+    capacity_max: 100000
+    capacity_unit: "SCMD"
+    discharge_p_min: null
+    discharge_p_max: 120
+    pressure_unit: barg
+    driver: ["gas engine", "electric motor"]
+    standards: ["API-11P", "ISO 13631"]
+    source_doc_id: doc.process
+    source_locator: "§Natural Gas Compressors"
+    gases: ["natural gas"]
+
+company_facts:
+  - fact_id: cf.001
+    kind: certification
+    value: "ISO 9001:2015"
+    detail: {}
+    source_doc_id: doc.about
+    source_locator: "§Certifications"
+  - fact_id: cf.002
+    kind: certification
+    value: "ISO 14001:2015"
+    detail: {}
+    source_doc_id: doc.about
+    source_locator: "§Certifications"
+  - fact_id: cf.003
+    kind: certification
+    value: "ISO 45001:2018"
+    detail: {}
+    source_doc_id: doc.about
+    source_locator: "§Certifications"
+  - fact_id: cf.004
+    kind: founded
+    value: "1991"
+    detail: {founder: "Deepak Bhatia"}
+    source_doc_id: doc.about
+    source_locator: "§History"
+  - fact_id: cf.005
+    kind: facility
+    value: "Manufacturing, Greater Noida"
+    detail: {count: 2}
+    source_doc_id: doc.about
+    source_locator: "§Facilities"
+  - fact_id: cf.011
+    kind: industry_served
+    value: "City Gas Distribution"
+    detail: {}
+    source_doc_id: doc.index
+    source_locator: "§Industries"
+  - fact_id: cf.020
+    kind: client
+    value: "IOCL"
+    detail: {sector: "oil & gas"}
+    source_doc_id: doc.about
+    source_locator: "§Clients"
+  - fact_id: cf.021
+    kind: client
+    value: "NDRF"
+    detail: {sector: "disaster mgmt"}
+    source_doc_id: doc.about
+    source_locator: "§Clients"
+  - fact_id: cf.030
+    kind: coverage
+    value: "Nepal, Bangladesh, Bhutan, Middle East"
+    detail: {}
+    source_doc_id: doc.about
+    source_locator: "§Network"
+  - fact_id: cf.040
+    kind: contact
+    value: "sales@jyotech.com"
+    detail: {purpose: sales}
+    source_doc_id: doc.index
+    source_locator: "footer"
+
+offices:
+  - office_id: off.noida
+    name: "Head Office"
+    city: "Noida"
+    region: "North"
+    address: "G-141, Sector 63, Noida 201301, UP"
+    phone: "+91-120-4711300"
+    email: "info@jyotech.com"
+    serves_divisions: ["industrial", "fire_rescue", "diving"]
+    source_doc_id: doc.contact
+    source_locator: null
+  - office_id: off.mum
+    name: "Mumbai Office"
+    city: "Mumbai"
+    region: "West"
+    address: null
+    phone: null
+    email: null
+    serves_divisions: null
+    source_doc_id: doc.fs
+    source_locator: null
+  - office_id: off.kol
+    name: "Kolkata Office"
+    city: "Kolkata"
+    region: "East"
+    address: null
+    phone: null
+    email: null
+    serves_divisions: null
+    source_doc_id: doc.about
+    source_locator: null
+  - office_id: off.chn
+    name: "Chennai Office"
+    city: "Chennai"
+    region: "South"
+    address: null
+    phone: null
+    email: null
+    serves_divisions: null
+    source_doc_id: doc.fs
+    source_locator: null
+  - office_id: off.sgp
+    name: "Singapore"
+    city: "Singapore"
+    region: "Intl"
+    address: null
+    phone: null
+    email: null
+    serves_divisions: null
+    source_doc_id: doc.process
+    source_locator: null
+
+region_states:
+  - state: "Kerala"
+    region: "South"
+    office_id: off.chn
+  - state: "Tamil Nadu"
+    region: "South"
+    office_id: off.chn
+  - state: "Maharashtra"
+    region: "West"
+    office_id: off.mum
+  - state: "West Bengal"
+    region: "East"
+    office_id: off.kol
+  - state: "Uttar Pradesh"
+    region: "North"
+    office_id: off.noida
