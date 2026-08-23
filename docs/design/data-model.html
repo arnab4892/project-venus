@@ -1,0 +1,506 @@
+<title>Jyotech Agent Data Model</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#f6f5f2; --surface:#ffffff; --surface-2:#eeece7; --line:#d9d5cc;
+  --ink:#1d2430; --ink-2:#4b5566; --ink-3:#7a8394;
+  --facts:#0f4c81; --facts-soft:#e3edf6; --facts-ink:#0b3a63;
+  --ops:#b8521a; --ops-soft:#fbe9dd; --ops-ink:#8a3a0f;
+  --vec:#3c7a5a; --vec-soft:#e1f0e7; --vec-ink:#255540;
+  --code-bg:#f0eee9;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#151a21; --surface:#1d232c; --surface-2:#252c37; --line:#343c49;
+    --ink:#e8eaee; --ink-2:#b4bac6; --ink-3:#7f8797;
+    --facts:#6aa5dc; --facts-soft:#1a2c40; --facts-ink:#a9cdf0;
+    --ops:#e88b4f; --ops-soft:#3a2315; --ops-ink:#f3b88f;
+    --vec:#6dba90; --vec-soft:#1b2f25; --vec-ink:#a8dcbf;
+    --code-bg:#11161c;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#151a21; --surface:#1d232c; --surface-2:#252c37; --line:#343c49;
+  --ink:#e8eaee; --ink-2:#b4bac6; --ink-3:#7f8797;
+  --facts:#6aa5dc; --facts-soft:#1a2c40; --facts-ink:#a9cdf0;
+  --ops:#e88b4f; --ops-soft:#3a2315; --ops-ink:#f3b88f;
+  --vec:#6dba90; --vec-soft:#1b2f25; --vec-ink:#a8dcbf;
+  --code-bg:#11161c;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Source Sans 3",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:16px;line-height:1.5}
+code,pre,.mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+a{color:var(--facts)}
+.wrap{display:grid;grid-template-columns:220px minmax(0,1fr);gap:40px;max-width:1320px;margin:0 auto;padding:32px 24px 80px}
+nav{position:sticky;top:24px;align-self:start;font-size:14px}
+nav .kicker{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px}
+nav a{display:block;color:var(--ink-2);text-decoration:none;padding:4px 0 4px 10px;border-left:2px solid var(--line)}
+nav a:hover,nav a:focus-visible{color:var(--ink);border-left-color:var(--ink);outline:none}
+nav a.sub{padding-left:22px;font-size:13px}
+header h1{font-size:34px;line-height:1.1;margin:0 0 8px;text-wrap:balance;font-weight:700}
+header p.lede{max-width:68ch;color:var(--ink-2);margin:0 0 18px;font-size:17px}
+.legend{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 36px}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:4px 10px;border-radius:3px;font-size:13px;font-weight:600;letter-spacing:.02em}
+.chip::before{content:"";width:10px;height:10px;border-radius:2px;background:currentColor}
+.chip.facts{background:var(--facts-soft);color:var(--facts-ink)}
+.chip.ops{background:var(--ops-soft);color:var(--ops-ink)}
+.chip.vec{background:var(--vec-soft);color:var(--vec-ink)}
+section{margin:0 0 52px}
+h2{font-size:24px;margin:0 0 6px;letter-spacing:-.01em}
+h2 .tag{font-size:11px;letter-spacing:.12em;text-transform:uppercase;vertical-align:middle;margin-left:10px;padding:3px 7px;border-radius:3px;font-family:"Source Sans 3",sans-serif;font-weight:700}
+.tag.facts{background:var(--facts-soft);color:var(--facts-ink)}
+.tag.ops{background:var(--ops-soft);color:var(--ops-ink)}
+.tag.vec{background:var(--vec-soft);color:var(--vec-ink)}
+h3{font-size:17px;margin:30px 0 6px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+h3 code{font-size:15px;padding:2px 7px;border-radius:3px;background:var(--code-bg)}
+h3 .why{font-weight:400;color:var(--ink-2);font-size:15px}
+p{max-width:72ch;margin:0 0 12px}
+p.note{color:var(--ink-2);font-size:15px}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:4px;background:var(--surface);margin:10px 0 6px}
+table{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top;white-space:nowrap}
+td.wrap-cell{white-space:normal;min-width:260px;max-width:460px}
+th{background:var(--surface-2);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);position:sticky;top:0}
+tbody tr:last-child td{border-bottom:0}
+td.mono,th.mono{font-family:"JetBrains Mono",monospace;font-size:13px}
+td.null{color:var(--ink-3);font-style:italic}
+.pk{font-size:10px;letter-spacing:.08em;padding:1px 4px;border-radius:2px;border:1px solid var(--line);color:var(--ink-2);margin-left:4px;vertical-align:middle}
+.fk{color:var(--facts)}
+.schema-table{border-left:4px solid var(--line)}
+.schema-table.facts{border-left-color:var(--facts)}
+.schema-table.ops{border-left-color:var(--ops)}
+.schema-table.vec{border-left-color:var(--vec)}
+.cap{font-size:12px;color:var(--ink-3);margin:0 0 4px;letter-spacing:.06em;text-transform:uppercase}
+.caption{font-size:13px;color:var(--ink-3);margin:4px 0 0}
+pre.mermaid{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:16px;overflow-x:auto;margin:12px 0}
+/* conversation trace */
+.trace{display:grid;grid-template-columns:1fr;gap:18px;margin-top:16px}
+.turn{border:1px solid var(--line);border-radius:4px;background:var(--surface);overflow:hidden}
+.turn-head{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:start;padding:14px 18px;background:var(--surface-2);border-bottom:1px solid var(--line)}
+.turn-num{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--ink-3);padding-top:3px}
+.bubble{font-size:16px;max-width:72ch}
+.bubble .who{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:2px}
+.turn-body{padding:6px 18px 16px;display:grid;gap:10px}
+.step{display:grid;grid-template-columns:92px 1fr;gap:14px;align-items:start;padding:8px 0;border-bottom:1px dashed var(--line)}
+.step:last-child{border-bottom:0}
+.step>div{min-width:0}
+.turn-head>div{min-width:0}
+.op{font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;padding:3px 6px;border-radius:3px;text-align:center;margin-top:2px}
+.op.write{background:var(--ops-soft);color:var(--ops-ink)}
+.op.read{background:var(--facts-soft);color:var(--facts-ink)}
+.op.vread{background:var(--vec-soft);color:var(--vec-ink)}
+.op.reply{background:var(--surface-2);color:var(--ink-2)}
+.step .t{font-family:"JetBrains Mono",monospace;font-size:13px;color:var(--ink);margin:0 0 3px}
+.step .t b{font-weight:600}
+.step .d{font-size:14px;color:var(--ink-2);margin:0;max-width:none;overflow-wrap:anywhere}
+.step pre{margin:6px 0 0;padding:10px 12px;background:var(--code-bg);border-radius:3px;font-size:12.5px;line-height:1.5;overflow-x:auto;white-space:pre}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:18px}
+.stat{border:1px solid var(--line);border-radius:4px;padding:12px 14px;background:var(--surface)}
+.stat .n{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
+.stat .l{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-top:6px}
+.stat.facts .n{color:var(--facts)}.stat.ops .n{color:var(--ops)}.stat.vec .n{color:var(--vec)}
+@media (max-width:860px){.wrap{grid-template-columns:1fr}nav{position:static;display:flex;flex-wrap:wrap;gap:4px 14px}nav .kicker{width:100%}nav a{border-left:0;padding:2px 0}nav a.sub{display:none}.step{grid-template-columns:1fr}}
+@media (prefers-reduced-motion: reduce){*{scroll-behavior:auto}}
+html{scroll-behavior:smooth}
+</style>
+
+<div class="wrap">
+<nav>
+  <div class="kicker">Contents</div>
+  <a href="#overview">Entity overview</a>
+  <a href="#facts">Fact schema</a>
+  <a class="sub" href="#t-release">release · document</a>
+  <a class="sub" href="#t-family">product_family · product</a>
+  <a class="sub" href="#t-cap">capability_row · _gas</a>
+  <a class="sub" href="#t-company">company_fact · office</a>
+  <a class="sub" href="#t-chunk">chunk</a>
+  <a href="#vec">Vector schema</a>
+  <a href="#ops">Operational schema</a>
+  <a href="#flow">Data flow: one conversation</a>
+  <a href="#flow2">Data flow: after-sales</a>
+  <a href="#tools">Tool → table map</a>
+</nav>
+
+<main>
+<header>
+  <h1>Jyotech Agent Data Model</h1>
+  <p class="lede">Iteration 1. Three schemas in one Postgres database: a read-only <strong>fact</strong> schema rebuilt per content release, a per-release <strong>vector</strong> table, and an <strong>operational</strong> schema the runtime writes to. Sample rows are drawn from what the public site and the two catalogue PDFs actually say; a real conversation is then traced through every table.</p>
+  <div class="legend">
+    <span class="chip facts">facts.* — read-only, per release</span>
+    <span class="chip vec">vec.* — embeddings, per release</span>
+    <span class="chip ops">ops.* — runtime writes</span>
+  </div>
+</header>
+
+<section id="overview">
+  <h2>Entity overview</h2>
+  <pre class="mermaid">
+erDiagram
+    release ||--o{ product_family : "versions"
+    product_family ||--o{ product : "models / kits"
+    product_family ||--o{ capability_row : "published ranges"
+    capability_row ||--o{ capability_gas : "serves"
+    release ||--o{ company_fact : "versions"
+    release ||--o{ office : "versions"
+    release ||--o{ document : "versions"
+    document ||--o{ chunk : "split into"
+    chunk ||--|| chunk_embedding : "embedded"
+    client ||--o{ prompt_version : "owns"
+    client ||--o{ session : "owns"
+    session ||--o{ turn : "orchestrator pass"
+    turn ||--o{ message : "1..n bubbles, either role"
+    turn ||--o{ agent_invocation : "runs"
+    agent_invocation ||--o{ tool_call : "makes"
+    turn ||--o{ citation : "cites"
+    session ||--o{ lead : "may create"
+    lead ||--o{ handoff_dispatch : "sent via"
+  </pre>
+  <p class="note">Every fact row carries <code>source_doc_id</code> + <code>source_locator</code>, a pointer into <code>facts.document</code> and the page/section inside it. That pair powers citations, one-time human review, and invalidation when a PDF's hash changes.</p>
+</section>
+
+<!-- ================= FACTS ================= -->
+<section id="facts">
+  <h2>Fact schema <span class="tag facts">facts.*</span></h2>
+  <p>Produced by ingestion, reviewed once (~40 rows), tagged with a <code>release_id</code>. The runtime reads only the release marked active.</p>
+
+  <h3 id="t-release"><code>facts.release</code><span class="why">one row per ingestion run</span></h3>
+  <div class="tbl schema-table facts"><table>
+    <thead><tr><th>release_id <span class="pk">PK</span></th><th>built_at</th><th>is_active</th><th>source_manifest</th><th>notes</th></tr></thead>
+    <tbody><tr><td class="mono">r2026.08.1</td><td class="mono">2026-08-22 09:10+05:30</td><td class="mono">true</td><td class="mono wrap-cell">{"pages":11, "pdfs":["PROCESS.pdf#4f1c…","F&amp;S.pdf#9ab0…"]}</td><td>first public-content build</td></tr></tbody>
+  </table></div>
+
+  <h3><code>facts.document</code><span class="why">every crawled page and PDF — the target of <code>source_doc_id</code></span></h3>
+  <div class="tbl schema-table facts"><table>
+    <thead><tr><th>doc_id <span class="pk">PK</span></th><th>kind</th><th>title</th><th>url</th><th>division</th><th>sha256</th><th>pages</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">doc.process</td><td>pdf</td><td>Catalogue – Industrial Compressors &amp; Process Engineering Eqpt</td><td class="mono">…/pdf/Jyotech Catalog - PROCESS.pdf</td><td>industrial</td><td class="mono">4f1c…</td><td>1</td></tr>
+      <tr><td class="mono">doc.fs</td><td>pdf</td><td>Catalogue – Fire Rescue &amp; Diving Equipment</td><td class="mono">…/pdf/Jyotech Catalog - F&amp;S.pdf</td><td>fire_rescue</td><td class="mono">9ab0…</td><td>n</td></tr>
+      <tr><td class="mono">doc.about</td><td>html</td><td>About Us</td><td class="mono">…/about.html</td><td>all</td><td class="mono">c21e…</td><td>1</td></tr>
+      <tr><td class="mono">doc.pgc</td><td>html</td><td>Process Gas Compressors</td><td class="mono">…/process-gas-compressors.html</td><td>industrial</td><td class="mono">7d90…</td><td>1</td></tr>
+      <tr><td class="mono">doc.contact</td><td>html</td><td>Contact Us</td><td class="mono">…/contact.php</td><td>all</td><td class="mono">e4a2…</td><td>1</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3 id="t-family"><code>facts.product_family</code><span class="why">the unit the public content describes</span></h3>
+  <div class="tbl schema-table facts"><table>
+    <thead><tr><th>family_id <span class="pk">PK</span></th><th>division</th><th>category</th><th>name</th><th>standards</th><th>applications</th><th>source_doc_id <span class="pk fk">FK</span></th><th>source_locator</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">fam.oxygen_recip</td><td>industrial</td><td>Process Gas Compressors</td><td>Oxygen Compressor</td><td class="mono">{API-618 or equiv}</td><td>steel, ASU, cylinder filling</td><td class="mono">doc.process</td><td>§Oxygen Compressors</td></tr>
+      <tr><td class="mono">fam.process_recip</td><td>industrial</td><td>Process Gas Compressors</td><td>Process Gas Compressor</td><td class="mono">{API-618 or equiv}</td><td>refinery, chemical, fertiliser</td><td class="mono">doc.process</td><td>§Process Compressors</td></tr>
+      <tr><td class="mono">fam.natgas_hbo</td><td>industrial</td><td>Process Gas Compressors</td><td>Natural Gas Compressor</td><td class="mono">{API-11P, ISO 13631}</td><td>well head, gas lift, pipeline boosting</td><td class="mono">doc.process</td><td>§Natural Gas Compressors</td></tr>
+      <tr><td class="mono">fam.diaphragm</td><td>industrial</td><td>Process Gas Compressors</td><td>Diaphragm Compressor</td><td class="mono null">{}</td><td>high-purity gases</td><td class="mono">doc.process</td><td>§Diaphragm</td></tr>
+      <tr><td class="mono">fam.cng_booster</td><td>industrial</td><td>CNG / Bio-Gas Compressors</td><td>CNG &amp; Bio-Gas Booster</td><td class="mono null">{}</td><td>CGD, self-fuelling</td><td class="mono">doc.process</td><td>§Self-fuelling</td></tr>
+      <tr><td class="mono">fam.h2_fuelling</td><td>industrial</td><td>Hydrogen Compressors &amp; Fuelling</td><td>Hydrogen Fuelling System</td><td class="mono null">{}</td><td>H₂ refuelling</td><td class="mono">doc.process</td><td>§Hydrogen</td></tr>
+      <tr><td class="mono">fam.asp</td><td>industrial</td><td>Process Engineering</td><td>Air Separation Plant</td><td class="mono null">{}</td><td>O₂ / N₂ generation</td><td class="mono">doc.process</td><td>§ASP</td></tr>
+      <tr><td class="mono">fam.mch_bac</td><td>fire_rescue</td><td>Breathing Air Compressors</td><td>MCH Series Breathing Air Compressor</td><td class="mono">{EN 12021}</td><td>fire stations, diving, industry</td><td class="mono">doc.fs</td><td>§Breathing Air Compressors</td></tr>
+      <tr><td class="mono">fam.lifting_bags</td><td>fire_rescue</td><td>Rescue Equipment</td><td>Air Lifting Bags</td><td class="mono null">{}</td><td>structural collapse, vehicle rescue</td><td class="mono">doc.fs</td><td>§Air Lifting Bags</td></tr>
+      <tr><td class="mono">fam.scba</td><td>fire_rescue</td><td>PPE</td><td>Self-Contained Breathing Apparatus</td><td class="mono null">{}</td><td>fire, hazmat</td><td class="mono">doc.fs</td><td>§PPE</td></tr>
+      <tr><td class="mono">fam.search_eq</td><td>fire_rescue</td><td>Search &amp; Rescue</td><td>Search Cameras &amp; Life Detectors</td><td class="mono null">{}</td><td>USAR, mine rescue</td><td class="mono">doc.fs</td><td>§Search &amp; Rescue</td></tr>
+      <tr><td class="mono">fam.diving_masks</td><td>diving</td><td>Diving Equipment</td><td>Full-Face Diving Masks</td><td class="mono null">{}</td><td>navy, coast guard, commercial diving</td><td class="mono">doc.fs</td><td>§Diving</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3><code>facts.product</code><span class="why">named models, variants, kits — only where the catalogue prints a name</span></h3>
+  <div class="tbl schema-table facts"><table>
+    <thead><tr><th>product_id <span class="pk">PK</span></th><th>family_id <span class="pk fk">FK</span></th><th>model_name</th><th>variant</th><th>attributes (printed only)</th><th>source_doc_id</th><th>source_locator</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">prd.mch6</td><td class="mono">fam.mch_bac</td><td class="mono">MCH-6</td><td class="null">null</td><td class="mono">{"portability":"portable"}</td><td class="mono">doc.fs</td><td>§Breathing Air</td></tr>
+      <tr><td class="mono">prd.mch13_16</td><td class="mono">fam.mch_bac</td><td class="mono">MCH-13/16</td><td class="null">null</td><td class="mono null">{}</td><td class="mono">doc.fs</td><td>§Breathing Air</td></tr>
+      <tr><td class="mono">prd.mch21_23_smart</td><td class="mono">fam.mch_bac</td><td class="mono">MCH-21/23</td><td class="mono">SMART</td><td class="mono null">{}</td><td class="mono">doc.fs</td><td>§Breathing Air</td></tr>
+      <tr><td class="mono">prd.mch_mark3</td><td class="mono">fam.mch_bac</td><td class="mono">MCH</td><td class="mono">MARK3 SILENT</td><td class="mono null">{}</td><td class="mono">doc.fs</td><td>§Breathing Air</td></tr>
+      <tr><td class="mono">prd.bag_vega</td><td class="mono">fam.lifting_bags</td><td class="mono">VEGA</td><td>high pressure</td><td class="mono">{"spec_table":true}</td><td class="mono">doc.fs</td><td>§Air Lifting Bags</td></tr>
+      <tr><td class="mono">prd.bag_nova</td><td class="mono">fam.lifting_bags</td><td class="mono">NOVA</td><td>low pressure</td><td class="mono">{"spec_table":true}</td><td class="mono">doc.fs</td><td>§Air Lifting Bags</td></tr>
+      <tr><td class="mono">prd.neptune3</td><td class="mono">fam.diving_masks</td><td class="mono">NEPTUNE III</td><td class="null">null</td><td class="mono null">{}</td><td class="mono">doc.fs</td><td>§Diving</td></tr>
+      <tr><td class="mono">prd.proeye951</td><td class="mono">fam.search_eq</td><td class="mono">PROEYE 951.S</td><td class="mono">951.S.IN</td><td class="mono null">{}</td><td class="mono">doc.fs</td><td>§Search &amp; Rescue</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3 id="t-cap"><code>facts.capability_row</code><span class="why">the published duty envelope per family — what <code>match_capability</code> filters</span></h3>
+  <div class="tbl schema-table facts"><table>
+    <thead><tr><th>cap_id <span class="pk">PK</span></th><th>family_id <span class="pk fk">FK</span></th><th>comp_type</th><th>lubricated</th><th>cooling</th><th>cap_min</th><th>cap_max</th><th>cap_unit</th><th>disch_p_min</th><th>disch_p_max</th><th>p_unit</th><th>driver</th><th>standards</th><th>source</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">cap.001</td><td class="mono">fam.oxygen_recip</td><td>reciprocating, vertical / V / W / horizontal</td><td class="mono">false</td><td>water</td><td class="null">null</td><td class="mono">20 000</td><td class="mono">Nm3/hr</td><td class="null">null</td><td class="mono">50</td><td class="mono">barg</td><td class="mono">{electric motor}</td><td class="mono">{API-618 or equiv}</td><td class="mono">doc.process §Oxygen</td></tr>
+      <tr><td class="mono">cap.002</td><td class="mono">fam.process_recip</td><td>reciprocating, vertical / V / W / horizontal</td><td class="mono">false</td><td>water</td><td class="null">null</td><td class="mono">20 000</td><td class="mono">Nm3/hr</td><td class="null">null</td><td class="mono">1 000</td><td class="mono">barg</td><td class="mono">{electric motor}</td><td class="mono">{API-618 or equiv}</td><td class="mono">doc.process §Process</td></tr>
+      <tr><td class="mono">cap.003</td><td class="mono">fam.natgas_hbo</td><td>reciprocating, horizontal balanced-opposed</td><td class="mono">true</td><td>air</td><td class="mono">10 000</td><td class="mono">100 000</td><td class="mono">SCMD</td><td class="null">null</td><td class="mono">120</td><td class="mono">barg</td><td class="mono">{gas engine, electric motor}</td><td class="mono">{API-11P, ISO 13631}</td><td class="mono">doc.process §Natural gas</td></tr>
+    </tbody>
+  </table></div>
+  <p class="caption">null means "not published", never zero. Units stay on the row because the catalogue mixes Nm³/hr and SCMD; the tool normalises before comparing.</p>
+
+  <h3><code>facts.capability_gas</code><span class="why">one row per gas so the filter is a plain join</span></h3>
+  <div class="tbl schema-table facts"><table>
+    <thead><tr><th>cap_id <span class="pk fk">FK</span></th><th>gas</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">cap.001</td><td>oxygen</td></tr>
+      <tr><td class="mono">cap.002</td><td>hydrogen</td></tr>
+      <tr><td class="mono">cap.002</td><td>hydrocarbon gas</td></tr>
+      <tr><td class="mono">cap.002</td><td>natural gas</td></tr>
+      <tr><td class="mono">cap.002</td><td>BOG</td></tr>
+      <tr><td class="mono">cap.002</td><td>mixed gas</td></tr>
+      <tr><td class="mono">cap.003</td><td>natural gas</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3 id="t-company"><code>facts.company_fact</code><span class="why">typed key/value behind the Documents &amp; Compliance agent</span></h3>
+  <div class="tbl schema-table facts"><table>
+    <thead><tr><th>fact_id <span class="pk">PK</span></th><th>kind</th><th>value</th><th>detail</th><th>source_doc_id</th><th>source_locator</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">cf.001</td><td>certification</td><td>ISO 9001:2015</td><td class="mono null">{}</td><td class="mono">doc.about</td><td>§Certifications</td></tr>
+      <tr><td class="mono">cf.002</td><td>certification</td><td>ISO 14001:2015</td><td class="mono null">{}</td><td class="mono">doc.about</td><td>§Certifications</td></tr>
+      <tr><td class="mono">cf.003</td><td>certification</td><td>ISO 45001:2018</td><td class="mono null">{}</td><td class="mono">doc.about</td><td>§Certifications</td></tr>
+      <tr><td class="mono">cf.004</td><td>founded</td><td>1991</td><td class="mono">{"founder":"Deepak Bhatia"}</td><td class="mono">doc.about</td><td>§History</td></tr>
+      <tr><td class="mono">cf.005</td><td>facility</td><td>Manufacturing, Greater Noida</td><td class="mono">{"count":2}</td><td class="mono">doc.about</td><td>§Facilities</td></tr>
+      <tr><td class="mono">cf.011</td><td>industry_served</td><td>City Gas Distribution</td><td class="mono null">{}</td><td class="mono">doc.index</td><td>§Industries</td></tr>
+      <tr><td class="mono">cf.020</td><td>client</td><td>IOCL</td><td class="mono">{"sector":"oil &amp; gas"}</td><td class="mono">doc.about</td><td>§Clients</td></tr>
+      <tr><td class="mono">cf.021</td><td>client</td><td>NDRF</td><td class="mono">{"sector":"disaster mgmt"}</td><td class="mono">doc.about</td><td>§Clients</td></tr>
+      <tr><td class="mono">cf.030</td><td>coverage</td><td>Nepal, Bangladesh, Bhutan, Middle East</td><td class="mono null">{}</td><td class="mono">doc.about</td><td>§Network</td></tr>
+      <tr><td class="mono">cf.040</td><td>contact</td><td>sales@jyotech.com</td><td class="mono">{"purpose":"sales"}</td><td class="mono">doc.index</td><td>footer</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3><code>facts.office</code> + <code>facts.region_state</code><span class="why">what after-sales routing keys on</span></h3>
+  <div class="tbl schema-table facts"><table>
+    <thead><tr><th>office_id <span class="pk">PK</span></th><th>name</th><th>city</th><th>region</th><th>address</th><th>phone</th><th>email</th><th>serves_divisions</th><th>source</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">off.noida</td><td>Head Office</td><td>Noida</td><td class="mono">North</td><td>G-141, Sector 63, Noida 201301, UP</td><td class="mono">+91-120-4711300</td><td class="mono">info@jyotech.com</td><td class="mono">{industrial, fire_rescue, diving}</td><td class="mono">doc.contact</td></tr>
+      <tr><td class="mono">off.mum</td><td>Mumbai Office</td><td>Mumbai</td><td class="mono">West</td><td>as printed</td><td>as printed</td><td class="null">null → falls back to sales@</td><td class="mono">{…}</td><td class="mono">doc.fs</td></tr>
+      <tr><td class="mono">off.kol</td><td>Kolkata Office</td><td>Kolkata</td><td class="mono">East</td><td>as printed</td><td>as printed</td><td class="null">null</td><td class="mono">{…}</td><td class="mono">doc.about</td></tr>
+      <tr><td class="mono">off.chn</td><td>Chennai Office</td><td>Chennai</td><td class="mono">South</td><td>as printed</td><td>as printed</td><td class="null">null</td><td class="mono">{…}</td><td class="mono">doc.fs</td></tr>
+      <tr><td class="mono">off.sgp</td><td>Singapore</td><td>Singapore</td><td class="mono">Intl</td><td>as printed</td><td>as printed</td><td class="null">null</td><td class="mono">{…}</td><td class="mono">doc.process</td></tr>
+    </tbody>
+  </table></div>
+  <div class="tbl schema-table facts"><table>
+    <thead><tr><th>state</th><th>region</th><th>office_id <span class="pk fk">FK</span></th></tr></thead>
+    <tbody>
+      <tr><td>Kerala</td><td class="mono">South</td><td class="mono">off.chn</td></tr>
+      <tr><td>Tamil Nadu</td><td class="mono">South</td><td class="mono">off.chn</td></tr>
+      <tr><td>Maharashtra</td><td class="mono">West</td><td class="mono">off.mum</td></tr>
+      <tr><td>West Bengal</td><td class="mono">East</td><td class="mono">off.kol</td></tr>
+      <tr><td>Uttar Pradesh</td><td class="mono">North</td><td class="mono">off.noida</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3 id="t-chunk"><code>facts.chunk</code><span class="why">retrieval units; <code>family_ids</code> is the pre-filter that replaces SKU tagging</span></h3>
+  <div class="tbl schema-table facts"><table>
+    <thead><tr><th>chunk_id <span class="pk">PK</span></th><th>doc_id <span class="pk fk">FK</span></th><th>locator</th><th>heading_path</th><th>family_ids</th><th>tokens</th><th>content_md</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">ch.process.0003</td><td class="mono">doc.process</td><td>p1 §Process</td><td class="mono">{Products, Process Compressors}</td><td class="mono">{fam.process_recip}</td><td class="mono">412</td><td class="wrap-cell">"Reciprocating, Non-Lubricated, Water Cooled … Capacity up to 20,000 Nm³/hr, Discharge up to 1,000 Barg … Hydrogen, hydrocarbon gases, natural gas, BOG, mixed gas … API-618 or equivalent"</td></tr>
+      <tr><td class="mono">ch.pgc.0002</td><td class="mono">doc.pgc</td><td>§Process Compressors</td><td class="mono">{Process Gas Compressors}</td><td class="mono">{fam.process_recip}</td><td class="mono">180</td><td class="wrap-cell">"Process Compressors (Reciprocating) … up to 1,000 Barg … API-618 or equivalent"</td></tr>
+      <tr><td class="mono">ch.fs.0042</td><td class="mono">doc.fs</td><td>§Breathing Air</td><td class="mono">{Fire &amp; Safety, Breathing Air Compressors}</td><td class="mono">{fam.mch_bac}</td><td class="mono">530</td><td class="wrap-cell">"MCH-13/16 … electric or engine driven … suitable for fire stations …"</td></tr>
+      <tr><td class="mono">ch.about.0001</td><td class="mono">doc.about</td><td>§Certifications</td><td class="mono">{About Us}</td><td class="mono null">{}</td><td class="mono">96</td><td class="wrap-cell">"ISO 9001:2015, ISO 14001:2015, ISO 45001:2018 certified …"</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ================= VEC ================= -->
+<section id="vec">
+  <h2>Vector schema <span class="tag vec">vec.*</span></h2>
+  <p>One table per release, exactly as in the C&amp;S build, so a new release can be embedded side by side and swapped atomically.</p>
+  <div class="tbl schema-table vec"><table>
+    <thead><tr><th>table</th><th>chunk_id <span class="pk">PK</span></th><th>embedding</th><th>model</th><th>created_at</th><th>index</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">vec.chunk_embedding_r2026_08_1</td><td class="mono">ch.process.0003</td><td class="mono">vector(1024) [0.0213, -0.118, …]</td><td class="mono">bge-m3</td><td class="mono">2026-08-22 09:14</td><td class="mono">HNSW (cosine)</td></tr>
+      <tr><td class="mono">vec.chunk_embedding_r2026_08_1</td><td class="mono">ch.pgc.0002</td><td class="mono">vector(1024) […]</td><td class="mono">bge-m3</td><td class="mono">2026-08-22 09:14</td><td></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ================= OPS ================= -->
+<section id="ops">
+  <h2>Operational schema <span class="tag ops">ops.*</span></h2>
+  <p>Written at runtime, never rebuilt. <code>turn</code> is one orchestrator pass and the parent of all agent and tool logs; <code>message</code> is every bubble the widget shows, and a turn owns one or more of them in <em>either</em> role — two quick user messages can trigger one pass, and one pass can emit an answer, a follow-up question, a status bubble and a document card as separate messages. The FK therefore lives on <code>message.turn_id</code>, not on the turn.</p>
+
+  <h3><code>ops.client</code> · <code>ops.prompt_version</code></h3>
+  <div class="tbl schema-table ops"><table>
+    <thead><tr><th>client_id <span class="pk">PK</span></th><th>name</th><th>domain</th><th>theme</th><th>active_release</th><th>handoff_to</th></tr></thead>
+    <tbody><tr><td class="mono">jyotech</td><td>Jyotech Engineering</td><td class="mono">www.jyotech.com</td><td class="mono">{"primary":"#0B3C5D","logo":"…"}</td><td class="mono">r2026.08.1</td><td class="mono">{"sales":"sales@jyotech.com"}</td></tr></tbody>
+  </table></div>
+  <div class="tbl schema-table ops"><table>
+    <thead><tr><th>prompt_id <span class="pk">PK</span></th><th>client_id</th><th>agent</th><th>version</th><th>is_active</th><th>body</th><th>created_at</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">pv.001</td><td class="mono">jyotech</td><td class="mono">triage</td><td class="mono">3</td><td class="mono">true</td><td class="wrap-cell">"You classify visitor messages for Jyotech into division, intent, language …"</td><td class="mono">2026-08-22</td></tr>
+      <tr><td class="mono">pv.002</td><td class="mono">jyotech</td><td class="mono">application_discovery</td><td class="mono">2</td><td class="mono">true</td><td class="wrap-cell">"Ask one missing slot at a time: gas → flow → discharge P → oil-free → standard …"</td><td class="mono">2026-08-22</td></tr>
+      <tr><td class="mono">pv.003</td><td class="mono">jyotech</td><td class="mono">handoff</td><td class="mono">1</td><td class="mono">true</td><td class="wrap-cell">"Collect name, company, phone (WhatsApp ok?), email, city. Confirm consent …"</td><td class="mono">2026-08-22</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3><code>ops.session</code></h3>
+  <div class="tbl schema-table ops"><table>
+    <thead><tr><th>session_id <span class="pk">PK</span></th><th>client_id</th><th>release_id</th><th>started_at</th><th>ended_at</th><th>landing_url</th><th>user_agent</th><th>ip</th><th>cookie_id</th><th>locale</th><th>lead_id</th><th>end_reason</th></tr></thead>
+    <tbody><tr><td class="mono">7c1e…</td><td class="mono">jyotech</td><td class="mono">r2026.08.1</td><td class="mono">11:04:12</td><td class="mono">11:09:02</td><td class="mono">/process-gas-compressors.html</td><td class="mono">Chrome/128 Win</td><td class="mono">103.x.x.x</td><td class="mono">cj_9f…</td><td class="mono">en-IN</td><td class="mono">L1</td><td class="mono">handoff</td></tr></tbody>
+  </table></div>
+
+  <h3><code>ops.message</code> · <code>ops.turn</code></h3>
+  <div class="tbl schema-table ops"><table>
+    <thead><tr><th>message_id <span class="pk">PK</span></th><th>session_id</th><th>turn_id <span class="pk fk">FK</span></th><th>seq_in_turn</th><th>role</th><th>kind</th><th>text / payload</th><th>at</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">m1</td><td class="mono">7c1e…</td><td class="mono">t1</td><td class="mono">1</td><td>user</td><td class="mono">text</td><td class="wrap-cell">We need to compress hydrogen, about 3000 Nm3/hr from 20 bar to 350 bar for a refinery. Oil-free is mandatory.</td><td class="mono">11:04:31</td></tr>
+      <tr><td class="mono">m2</td><td class="mono">7c1e…</td><td class="mono">t1</td><td class="mono">2</td><td>assistant</td><td class="mono">text</td><td class="wrap-cell">That duty sits inside our reciprocating, non-lubricated process gas compressor range (API-618 or equivalent), published up to 20,000 Nm³/hr and 1,000 barg [1]. Exact frame and staging come from our engineers.</td><td class="mono">11:04:34</td></tr>
+      <tr><td class="mono">m2b</td><td class="mono">7c1e…</td><td class="mono">t1</td><td class="mono">3</td><td>assistant</td><td class="mono">document_card</td><td class="wrap-cell">{"doc_id":"doc.process","label":"Process catalogue (PDF)","locator":"§Process Compressors"}</td><td class="mono">11:04:34</td></tr>
+      <tr><td class="mono">m2c</td><td class="mono">7c1e…</td><td class="mono">t1</td><td class="mono">4</td><td>assistant</td><td class="mono">text</td><td class="wrap-cell">Do you need a specific standard, and is there a target delivery timeline?</td><td class="mono">11:04:35</td></tr>
+      <tr><td class="mono">m6a</td><td class="mono">7c1e…</td><td class="mono">t3</td><td class="mono">2</td><td>assistant</td><td class="mono">status</td><td class="wrap-cell">Sending your RFQ to our sales team…</td><td class="mono">11:07:40</td></tr>
+      <tr><td class="mono">m6b</td><td class="mono">7c1e…</td><td class="mono">t3</td><td class="mono">3</td><td>assistant</td><td class="mono">text</td><td class="wrap-cell">Sent. Your reference is JYO-2608-0142 …</td><td class="mono">11:07:42</td></tr>
+    </tbody>
+  </table></div>
+  <div class="tbl schema-table ops"><table>
+    <thead><tr><th>turn_id <span class="pk">PK</span></th><th>session_id</th><th>seq</th><th>started_at</th><th>completed_at</th><th>triage</th><th>routed_agent</th><th>grounding</th><th>outcome</th><th>latency_ms</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">t1</td><td class="mono">7c1e…</td><td class="mono">1</td><td class="mono">11:04:31</td><td class="mono">11:04:35</td><td class="mono wrap-cell">{"division":"industrial","intent":"application_enquiry","language":"en","in_scope":true,"confidence":0.94}</td><td class="mono">application_discovery</td><td class="mono">{"claims":4,"grounded":4,"status":"full"}</td><td class="mono">asked_slot</td><td class="mono">2870</td></tr>
+      <tr><td class="mono">t2</td><td class="mono">7c1e…</td><td class="mono">2</td><td class="mono">11:05:50</td><td class="mono">11:05:52</td><td class="mono wrap-cell">{"intent":"application_enquiry", …}</td><td class="mono">application_discovery → handoff</td><td class="mono">n/a</td><td class="mono">asked_slot</td><td class="mono">1410</td></tr>
+      <tr><td class="mono">t3</td><td class="mono">7c1e…</td><td class="mono">3</td><td class="mono">11:07:12</td><td class="mono">11:07:42</td><td class="mono wrap-cell">{"intent":"handoff_details", …}</td><td class="mono">handoff</td><td class="mono">n/a</td><td class="mono">handoff</td><td class="mono">2210</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3><code>ops.agent_invocation</code> · <code>ops.tool_call</code> · <code>ops.citation</code></h3>
+  <div class="tbl schema-table ops"><table>
+    <thead><tr><th>inv_id <span class="pk">PK</span></th><th>turn_id</th><th>agent</th><th>prompt_id</th><th>slots / output</th><th>tok_in</th><th>tok_out</th><th>ms</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">inv1</td><td class="mono">t1</td><td class="mono">triage</td><td class="mono">pv.001</td><td class="mono wrap-cell">→ triage json</td><td class="mono">640</td><td class="mono">48</td><td class="mono">380</td></tr>
+      <tr><td class="mono">inv2</td><td class="mono">t1</td><td class="mono">application_discovery</td><td class="mono">pv.002</td><td class="mono wrap-cell">{"gas":"hydrogen","capacity":3000,"capacity_unit":"Nm3/hr","suction_p":20,"discharge_p":350,"lubricated":false,"industry":"refinery","standard":null,"timeline":null}</td><td class="mono">2 110</td><td class="mono">190</td><td class="mono">2 300</td></tr>
+      <tr><td class="mono">inv3</td><td class="mono">t2</td><td class="mono">application_discovery</td><td class="mono">pv.002</td><td class="mono wrap-cell">{…,"standard":"API-618","timeline":"Q2 2027"} → {"action":"handoff","reason":"user_requested_rfq"}</td><td class="mono">1 900</td><td class="mono">60</td><td class="mono">900</td></tr>
+      <tr><td class="mono">inv4</td><td class="mono">t2</td><td class="mono">handoff</td><td class="mono">pv.003</td><td class="mono wrap-cell">→ asks contact details</td><td class="mono">800</td><td class="mono">70</td><td class="mono">500</td></tr>
+      <tr><td class="mono">inv5</td><td class="mono">t3</td><td class="mono">handoff</td><td class="mono">pv.003</td><td class="mono wrap-cell">→ lead L1, dispatch D1</td><td class="mono">1 200</td><td class="mono">140</td><td class="mono">2 000</td></tr>
+    </tbody>
+  </table></div>
+  <div class="tbl schema-table ops"><table>
+    <thead><tr><th>call_id <span class="pk">PK</span></th><th>inv_id</th><th>tool</th><th>args</th><th>result_summary</th><th>rows</th><th>ms</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">c1</td><td class="mono">inv2</td><td class="mono">match_capability</td><td class="mono wrap-cell">{"gas":"hydrogen","capacity":3000,"capacity_unit":"Nm3/hr","discharge_p":350,"lubricated":false}</td><td class="mono wrap-cell">{"matches":[{"cap_id":"cap.002","family_id":"fam.process_recip","headroom":{"capacity":0.85,"pressure":0.65}}],"near_edge":false}</td><td class="mono">1</td><td class="mono">12</td></tr>
+      <tr><td class="mono">c2</td><td class="mono">inv2</td><td class="mono">search_documents</td><td class="mono wrap-cell">{"query":"process gas compressor hydrogen API-618","division":"industrial","family_ids":["fam.process_recip"],"k":3}</td><td class="mono wrap-cell">{"chunk_ids":["ch.process.0003","ch.pgc.0002"]}</td><td class="mono">2</td><td class="mono">41</td></tr>
+      <tr><td class="mono">c3</td><td class="mono">inv5</td><td class="mono">get_office</td><td class="mono wrap-cell">{"state":"Kerala"}</td><td class="mono wrap-cell">{"office_id":"off.chn","region":"South"}</td><td class="mono">1</td><td class="mono">4</td></tr>
+    </tbody>
+  </table></div>
+  <div class="tbl schema-table ops"><table>
+    <thead><tr><th>citation_id <span class="pk">PK</span></th><th>turn_id</th><th>kind</th><th>ref_id</th><th>locator</th><th>url</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">ct1</td><td class="mono">t1</td><td class="mono">chunk</td><td class="mono">ch.process.0003</td><td>PROCESS.pdf §Process Compressors</td><td class="mono">…/Jyotech Catalog - PROCESS.pdf</td></tr>
+      <tr><td class="mono">ct2</td><td class="mono">t1</td><td class="mono">capability</td><td class="mono">cap.002</td><td>PROCESS.pdf §Process Compressors</td><td class="mono">…/Jyotech Catalog - PROCESS.pdf</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3><code>ops.lead</code> · <code>ops.handoff_dispatch</code><span class="why">day-one scope — for Jyotech this is the product</span></h3>
+  <div class="tbl schema-table ops"><table>
+    <thead><tr><th>lead_id <span class="pk">PK</span></th><th>session_id</th><th>lead_type</th><th>division</th><th>region</th><th>contact</th><th>consent_at</th><th>enquiry</th><th>matched_family_id</th><th>route_to</th><th>reference_no</th><th>status</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">L1</td><td class="mono">7c1e…</td><td class="mono">rfq</td><td class="mono">industrial</td><td class="mono">South</td><td class="mono wrap-cell">{"name":"Ravi Menon","company":"Petrochem Projects Ltd","phone":"+91 98xxxxxx21","whatsapp_ok":true,"email":"ravi.menon@petrochem.example","city":"Kochi","state":"Kerala"}</td><td class="mono">11:07:40</td><td class="mono wrap-cell">{"gas":"hydrogen","capacity":3000,"capacity_unit":"Nm3/hr","suction_p":20,"discharge_p":350,"lubricated":false,"standard":"API-618","industry":"refinery","timeline":"Q2 2027"}</td><td class="mono">fam.process_recip</td><td class="mono">{sales@jyotech.com}</td><td class="mono">JYO-2608-0142</td><td class="mono">dispatched</td></tr>
+    </tbody>
+  </table></div>
+  <div class="tbl schema-table ops"><table>
+    <thead><tr><th>dispatch_id <span class="pk">PK</span></th><th>lead_id</th><th>channel</th><th>to</th><th>subject</th><th>body_md</th><th>sent_at</th><th>provider_msg_id</th><th>status</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">D1</td><td class="mono">L1</td><td class="mono">email</td><td class="mono">sales@jyotech.com</td><td class="wrap-cell">[JYO-2608-0142] RFQ – Hydrogen process gas compressor, 3000 Nm3/hr @ 350 barg, Petrochem Projects Ltd (Kochi)</td><td class="wrap-cell">contact block · enquiry table · matched family + catalogue link · 3-line transcript summary · session id</td><td class="mono">11:07:41</td><td class="mono">&lt;…&gt;</td><td class="mono">sent</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ================= FLOW ================= -->
+<section id="flow">
+  <h2>Data flow: one conversation, end to end</h2>
+  <p>Visitor lands on <code>process-gas-compressors.html</code>, 22 Aug 2026, 11:04 IST. Each step is tagged by what it does to the database.</p>
+  <div class="legend">
+    <span class="chip ops">write → ops.*</span>
+    <span class="chip facts">read ← facts.*</span>
+    <span class="chip vec">read ← vec.*</span>
+  </div>
+
+  <div class="trace">
+    <div class="turn">
+      <div class="turn-head"><div class="turn-num">TURN 1</div><div class="bubble"><span class="who">User</span>We need to compress hydrogen, about 3000 Nm3/hr from 20 bar to 350 bar for a refinery. Oil-free is mandatory.</div></div>
+      <div class="turn-body">
+        <div class="step"><span class="op write">write</span><div><p class="t"><b>ops.session</b> 7c1e…</p><p class="d">client jyotech · release r2026.08.1 · landing /process-gas-compressors.html · ua Chrome/128 · ip 103.x.x.x · cookie cj_9f… · locale en-IN</p></div></div>
+        <div class="step"><span class="op write">write</span><div><p class="t"><b>ops.message</b> m1 (user)</p></div></div>
+        <div class="step"><span class="op write">write</span><div><p class="t"><b>ops.turn</b> t1 · <b>ops.agent_invocation</b> inv1 (triage, pv.001)</p><pre>triage = {"division":"industrial","intent":"application_enquiry","language":"en","in_scope":true,"confidence":0.94}
+routed_agent = application_discovery</pre></div></div>
+        <div class="step"><span class="op write">write</span><div><p class="t"><b>ops.agent_invocation</b> inv2 (application_discovery, pv.002)</p><pre>slots = {"gas":"hydrogen","capacity":3000,"capacity_unit":"Nm3/hr","suction_p":20,"discharge_p":350,
+         "lubricated":false,"industry":"refinery","standard":null,"driver":null,"timeline":null}</pre></div></div>
+        <div class="step"><span class="op read">read</span><div><p class="t"><b>ops.tool_call</b> c1 → match_capability → <b>facts.capability_row ⋈ capability_gas</b></p><pre>args   {"gas":"hydrogen","capacity":3000,"capacity_unit":"Nm3/hr","discharge_p":350,"lubricated":false}
+result {"matches":[{"cap_id":"cap.002","family_id":"fam.process_recip","headroom":{"capacity":0.85,"pressure":0.65}}],"near_edge":false}</pre><p class="d">cap.001 fails on gas; cap.003 fails on gas, lubrication and pressure (120 &lt; 350); cap.002 passes every column.</p></div></div>
+        <div class="step"><span class="op vread">read</span><div><p class="t"><b>ops.tool_call</b> c2 → search_documents → <b>vec.chunk_embedding_r2026_08_1 ⋈ facts.chunk</b></p><pre>args   {"query":"process gas compressor hydrogen API-618","division":"industrial","family_ids":["fam.process_recip"],"k":3}
+result {"chunk_ids":["ch.process.0003","ch.pgc.0002"]}</pre></div></div>
+        <div class="step"><span class="op write">write</span><div><p class="t"><b>ops.turn</b> t1.grounding · <b>ops.citation</b> ct1, ct2</p><pre>grounding = {"claims":4,"grounded":4,"status":"full"}
+ct1 chunk ch.process.0003 "PROCESS.pdf §Process Compressors"
+ct2 capability cap.002</pre></div></div>
+        <div class="step"><span class="op reply">reply</span><div><p class="t"><b>ops.message</b> m2, m2b, m2c (assistant, turn t1, seq 2–4) · turn.outcome = asked_slot · 2 870 ms</p><p class="d">m2 text — "That duty sits inside our reciprocating, non-lubricated process gas compressor range (API-618 or equivalent), published up to 20,000 Nm³/hr and 1,000 barg [1]. Exact frame and staging come from our engineers."<br>m2b document_card — Process catalogue (PDF), §Process Compressors<br>m2c text — "Do you need a specific standard, and is there a target delivery timeline?"</p></div></div>
+      </div>
+    </div>
+
+    <div class="turn">
+      <div class="turn-head"><div class="turn-num">TURN 2</div><div class="bubble"><span class="who">User</span>API-618 preferred. Need it commissioned by Q2 next year. Can you send an RFQ to your team?</div></div>
+      <div class="turn-body">
+        <div class="step"><span class="op write">write</span><div><p class="t"><b>ops.message</b> m3 · <b>ops.turn</b> t2 · <b>ops.agent_invocation</b> inv3 (application_discovery)</p><pre>slots += {"standard":"API-618","timeline":"Q2 2027"}
+output  = {"action":"handoff","reason":"user_requested_rfq"}</pre></div></div>
+        <div class="step"><span class="op write">write</span><div><p class="t"><b>ops.agent_invocation</b> inv4 (handoff, pv.003)</p></div></div>
+        <div class="step"><span class="op reply">reply</span><div><p class="t"><b>ops.message</b> m4 · outcome = asked_slot</p><p class="d">"Happy to. I'll need a few details for our engineers: your name, company, phone (WhatsApp OK?), email and city."</p></div></div>
+      </div>
+    </div>
+
+    <div class="turn">
+      <div class="turn-head"><div class="turn-num">TURN 3</div><div class="bubble"><span class="who">User</span>Ravi Menon, Petrochem Projects Ltd, +91 98xxxxxx21 (WhatsApp fine), ravi.menon@petrochem.example, Kochi.</div></div>
+      <div class="turn-body">
+        <div class="step"><span class="op write">write</span><div><p class="t"><b>ops.message</b> m5 · <b>ops.turn</b> t3 · <b>ops.agent_invocation</b> inv5 (handoff)</p></div></div>
+        <div class="step"><span class="op read">read</span><div><p class="t"><b>ops.tool_call</b> c3 → get_office → <b>facts.region_state ⋈ office</b></p><pre>args {"state":"Kerala"}   result {"office_id":"off.chn","region":"South"}</pre></div></div>
+        <div class="step"><span class="op write">write</span><div><p class="t"><b>ops.lead</b> L1</p><pre>lead_type rfq · division industrial · region South · matched_family fam.process_recip
+contact   {"name":"Ravi Menon","company":"Petrochem Projects Ltd","phone":"+91 98xxxxxx21","whatsapp_ok":true,"email":"…","city":"Kochi","state":"Kerala"}
+enquiry   {"gas":"hydrogen","capacity":3000,"capacity_unit":"Nm3/hr","suction_p":20,"discharge_p":350,"lubricated":false,"standard":"API-618","industry":"refinery","timeline":"Q2 2027"}
+route_to  {sales@jyotech.com} · reference_no JYO-2608-0142 · consent_at 11:07:40 · status new</pre></div></div>
+        <div class="step"><span class="op write">write</span><div><p class="t"><b>ops.handoff_dispatch</b> D1 → email sales@jyotech.com</p><pre>subject "[JYO-2608-0142] RFQ – Hydrogen process gas compressor, 3000 Nm3/hr @ 350 barg, Petrochem Projects Ltd (Kochi)"
+sent_at 11:07:41 · status sent   →   lead.status = dispatched · session.lead_id = L1</pre></div></div>
+        <div class="step"><span class="op reply">reply</span><div><p class="t"><b>ops.message</b> m6a status "Sending your RFQ to our sales team…" → m6b text · outcome = handoff · <b>ops.session</b> ended_at 11:09:02, end_reason handoff</p><p class="d">"Sent. Your reference is JYO-2608-0142. Our sales team will contact you on +91 98xxxxxx21 (WhatsApp) within one working day. The enquiry is also summarised for our Chennai office, which covers Kerala."</p></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="summary">
+    <div class="stat ops"><div class="n">1</div><div class="l">session</div></div>
+    <div class="stat ops"><div class="n">9</div><div class="l">messages (3 user, 6 assistant)</div></div>
+    <div class="stat ops"><div class="n">3</div><div class="l">turns</div></div>
+    <div class="stat ops"><div class="n">5</div><div class="l">agent invocations</div></div>
+    <div class="stat ops"><div class="n">3</div><div class="l">tool calls</div></div>
+    <div class="stat ops"><div class="n">2</div><div class="l">citations</div></div>
+    <div class="stat ops"><div class="n">1 + 1</div><div class="l">lead + dispatch</div></div>
+    <div class="stat facts"><div class="n">4</div><div class="l">fact tables read</div></div>
+    <div class="stat vec"><div class="n">1</div><div class="l">vector lookup</div></div>
+  </div>
+</section>
+
+<section id="flow2">
+  <h2>Data flow: after-sales path</h2>
+  <div class="trace">
+    <div class="turn">
+      <div class="turn-head"><div class="turn-num">TURN 1</div><div class="bubble"><span class="who">User</span>Need spares for MCH-16 in Chennai.</div></div>
+      <div class="turn-body">
+        <div class="step"><span class="op write">write</span><div><p class="t"><b>ops.turn</b> triage</p><pre>{"division":"fire_rescue","intent":"after_sales","in_scope":true}  routed_agent = after_sales_intake</pre></div></div>
+        <div class="step"><span class="op read">read</span><div><p class="t">get_product → <b>facts.product ⋈ product_family</b></p><pre>{"model":"MCH-16"} → prd.mch13_16 (fam.mch_bac, "MCH Series Breathing Air Compressor")</pre></div></div>
+        <div class="step"><span class="op read">read</span><div><p class="t">get_office → <b>facts.office</b></p><pre>{"city":"Chennai"} → off.chn (South)</pre></div></div>
+        <div class="step"><span class="op reply">reply</span><div><p class="d">Confirms model family; asks serial / year, site, part or issue, preferred contact. No troubleshooting advice.</p></div></div>
+      </div>
+    </div>
+    <div class="turn">
+      <div class="turn-head"><div class="turn-num">TURN 2</div><div class="bubble"><span class="who">User</span>Serial 2019-xxx, Tambaram fire station, filter cartridge set. Call me on 98xxxxxx45.</div></div>
+      <div class="turn-body">
+        <div class="step"><span class="op write">write</span><div><p class="t"><b>ops.lead</b> L2</p><pre>lead_type after_sales · division fire_rescue · region South
+enquiry {"model":"MCH-16","family_id":"fam.mch_bac","serial":"2019-xxx","site":"Tambaram fire station","need":"spares – filter cartridge set","preferred_contact":"phone"}
+route_to {sales@jyotech.com}   ← Chennai office email not printed publicly; region carried in subject line</pre></div></div>
+        <div class="step"><span class="op write">write</span><div><p class="t"><b>ops.handoff_dispatch</b> D2</p><pre>subject "[JYO-2608-0143] After-sales – SOUTH – MCH-16 spares, Tambaram fire station"</pre></div></div>
+        <div class="step"><span class="op reply">reply</span><div><p class="d">Reference number, Chennai office phone from facts.office, expected callback window.</p></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="tools">
+  <h2>Tool → table map</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>tool</th><th>reads</th><th>filter / logic</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">match_capability</td><td class="mono">capability_row ⋈ capability_gas ⋈ product_family</td><td class="wrap-cell">gas ∈ list · capacity ≤ max (≥ min when set) · discharge_p ≤ max · lubricated match · Nm³/hr ↔ SCMD conversion · near-edge flag at &gt; 90 % of a limit</td></tr>
+      <tr><td class="mono">list_products</td><td class="mono">product_family, product</td><td class="wrap-cell">division, category</td></tr>
+      <tr><td class="mono">get_product</td><td class="mono">product ⋈ product_family</td><td class="wrap-cell">model_name ILIKE, alias table for "MCH16" / "MCH-16" / "MCH 16"</td></tr>
+      <tr><td class="mono">search_documents</td><td class="mono">chunk_embedding ⋈ chunk ⋈ document</td><td class="wrap-cell">division, family_ids pre-filter; hybrid vector + FTS; top-k</td></tr>
+      <tr><td class="mono">get_company_fact</td><td class="mono">company_fact</td><td class="wrap-cell">kind</td></tr>
+      <tr><td class="mono">get_office</td><td class="mono">office ⋈ region_state</td><td class="wrap-cell">city → state → region → office; falls back to head office</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note" style="margin-top:18px">Deltas from the C&amp;S model: dropped <code>sku_fact</code>, <code>taxonomy_level</code>, price and compare tools; added <code>capability_row</code> / <code>capability_gas</code>, <code>office</code> + <code>region_state</code>, <code>company_fact</code>, and moved <code>lead</code> + <code>handoff_dispatch</code> to day one. Sessions, turns, agent invocations, tool calls, prompt versions in DB and per-release embedding tables carry over unchanged.</p>
+</section>
+</main>
+</div>
