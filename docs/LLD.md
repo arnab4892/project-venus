@@ -1,11 +1,11 @@
 ---
 document: LLD
 product: Jyotech Agent
-version: 1.2
+version: 1.3
 aligned_to_hld: 1.0
 aligned_to_prd: 1.0
 status: Approved
-date: 2026-08-24
+date: 2026-08-23
 changelog: see CHANGELOG.md
 ---
 
@@ -32,11 +32,12 @@ docs/                    # this folder
 | ID | Item | Implements |
 |---|---|---|
 | LLD-DB-01 | Migration `0000_bootstrap` creates the `vector` extension and the four empty schemas `facts`, `vec`, `staging`, `ops` (with working downgrade); migration `0001_init` then creates all tables and columns exactly as `design/data-model.md` §2–3. Extension and schema state live in migrations only — never in docker init SQL. | HLD-001 |
-| LLD-DB-02 | `facts.*` tables carry `release_id`; a view `facts.active_*` per table filters to `release.is_active = true`. Tools read only the views. | HLD-001, HLD-C-05 |
+| LLD-DB-02 | Every `facts.*` table carries `release_id`; PK = `(natural_id, release_id)` (`capability_gas`: `(cap_id, release_id, gas)`); all intra-facts FKs are composite and same-release. Exactly one active release, enforced by a partial unique index on `release(is_active) WHERE is_active`. A `facts.active_<table>` view per table exposes the natural ids of the active release; the tool layer reads ONLY the views — no code outside the release module filters on `release_id`. (See the Keying rule note in `design/data-model.md` §2.) | HLD-001, HLD-C-05 |
 | LLD-DB-03 | `vec.chunk_embedding_<release>` created per release by the embedder; HNSW index `vector_cosine_ops`, `m=16, ef_construction=128`. | HLD-C-04 |
 | LLD-DB-04 | `ops.message` has `turn_id` FK, `seq_in_turn`, `kind ∈ {text, document_card, status, form}`; a turn owns 1..n messages in either role. | HLD-C-06 |
 | LLD-DB-05 | `ops.lead.reference_no` format `JYO-YYMM-NNNN`, sequence per client per month. | HLD-C-08 |
-| LLD-DB-06 | `staging.*` mirrors `facts.*` plus `evidence jsonb`, `confidence numeric`, `review_status ∈ {pending, approved, edited, rejected}`, `reviewer`, `reviewed_at`. | HLD-C-02, C-03 |
+| LLD-DB-06 | `staging.*` mirrors only the seven content tables (`document`, `product_family`, `product`, `capability_row`, `capability_gas`, `company_fact`, `office`) — the tables whose rows are LLM-proposed and human-reviewed — keyed by `release_candidate_id`, plus `evidence jsonb`, `confidence numeric`, `review_status ∈ {pending, approved, edited, rejected}`, `reviewer`, `reviewed_at`. No staging mirror for `release` (written by promote itself) or `region_state` (curated). Staging carries NO cross-table FKs — it holds unreviewed and rejected rows; FK closure is enforced at the release-import gate (LLD-REL-03), not in staging. | HLD-C-02, C-03 |
+| LLD-DB-07 | `facts.region_state` is curated configuration, not extracted content: columns `(state, release_id, region, office_id)` with composite FK to `office` and its own `active_` view; it carries no source columns (`source_doc_id` provenance is mandatory only for extracted facts) and enters via seed/release tooling, never via staging review. | HLD-C-08, HLD-001 |
 
 ## 2. Crawler & converter (LLD-ING) — implements HLD-C-01
 
@@ -60,7 +61,7 @@ docs/                    # this folder
 | LLD-EXT-06 | `ProductOut`: family_id, model_name (verbatim), variant, description, attributes (only printed). |
 | LLD-EXT-07 | `CompanyFactOut`: kind (enum: certification, founded, founder, facility, industry_served, client, coverage, contact), value, detail. |
 | LLD-EXT-08 | `OfficeOut`: name, city, state, address, phone, email, serves_divisions[]. Phone validated E.164-ish; city must resolve via `region_state`. |
-| LLD-EXT-09 | Numeric/unit normalisation in `extract/normalise.py`: "up to X" → max=X; Nm3/hr, Nm³/hr, NM3/HR → `Nm3/hr`; bar/barg → `barg`; SCMD kept, converted at query time (1 SCMD ≈ 1/24 Nm3/hr, documented constant). |
+| LLD-EXT-09 | Numeric/unit normalisation in `extract/normalise.py`: "up to X" → max=X; Nm3/hr, Nm³/hr, NM3/HR → `Nm3/hr`; bar/barg → `barg`; SCMD kept, converted at query time with the documented constant `1 Nm3/hr = 24 SCMD` (day = 24 hours). |
 | LLD-EXT-10 | Writes to `staging.*` with `release_candidate_id`; never to `facts.*`. |
 
 ## 4. Review & release (LLD-REL) — implements HLD-C-03
@@ -87,7 +88,7 @@ All tools are pure functions over the `facts.active_*` views, return JSON, and l
 
 | ID | Tool | Signature → result |
 |---|---|---|
-| LLD-TOOL-01 | `match_capability(gas, capacity, capacity_unit, discharge_p, lubricated?, standard?)` → `{matches:[{cap_id, family_id, headroom:{capacity, pressure}}], near_edge: bool}`; near_edge when any ratio > 0.9. Unit conversion per LLD-EXT-09. |
+| LLD-TOOL-01 | `match_capability(gas, capacity, capacity_unit, discharge_p, lubricated?, standard?)` → `{matches:[{cap_id, family_id, headroom:{capacity, pressure}}], near_edge: bool}`; `headroom = 1 − value/limit` per dimension; near_edge when any `value/limit` ratio > 0.9. Pure over the `facts.active_*` views. Unit conversion per LLD-EXT-09. |
 | LLD-TOOL-02 | `list_products(division, category?)` → families + products. |
 | LLD-TOOL-03 | `get_product(model_or_family)` → product ⋈ family; alias normalisation strips spaces/hyphens (`MCH16` = `MCH-16`). |
 | LLD-TOOL-04 | `search_documents(query, division?, family_ids?, k=5)` → chunks with locator + url (LLD-RET-03). |
@@ -151,6 +152,7 @@ Each agent = prompt (from `ops.prompt_version`) + allowed tool list + output sch
 
 | Version | Date | CR | Aligned to HLD / PRD | Summary |
 |---|---|---|---|---|
-| 1.2 | 2026-08-24 | — (clarification) | 1.0 / 1.0 | LLD-DB-01: `0000_bootstrap` migration (vector extension + empty schemas) precedes `0001_init`; DB state lives in migrations, not docker init SQL. Confirmed in Step 0. |
-| 1.1 | 2026-08-24 | — (clarification) | 1.0 / 1.0 | LLD-RET-01/02: explicit embed context (`num_ctx`), loud `ChunkTooLargeError` instead of silent truncation, table-split rule, truncation-canary golden question. No requirement or HLD change. |
-| 1.0 | 2026-08-22 | — | 1.0 / 1.0 | Initial LLD |
+| 1.3 | 2026-08-23 | — (clarification, from milestone-1-notes) | 1.0 / 1.0 | Implemented decisions folded in: composite keying + one-active-release index + views-only rule (LLD-DB-02); staging scope = seven content tables, no cross-table FKs (LLD-DB-06); region_state as curated no-source fact table (new LLD-DB-07); headroom formula (LLD-TOOL-01); SCMD constant (LLD-EXT-09). |
+| 1.2 | 2026-08-23 | — (clarification) | 1.0 / 1.0 | LLD-DB-01: `0000_bootstrap` migration (vector extension + empty schemas) precedes `0001_init`; DB state lives in migrations, not docker init SQL. Confirmed in Step 0. |
+| 1.1 | 2026-08-23 | — (clarification) | 1.0 / 1.0 | LLD-RET-01/02: explicit embed context (`num_ctx`), loud `ChunkTooLargeError` instead of silent truncation, table-split rule, truncation-canary golden question. No requirement or HLD change. |
+| 1.0 | 2026-08-23 | — | 1.0 / 1.0 | Initial LLD |

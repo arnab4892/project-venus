@@ -4,7 +4,7 @@ product: Jyotech Agent
 version: 1.0
 aligned_to_prd: 1.0
 status: Approved
-date: 2026-08-22
+date: 2026-08-23
 changelog: see CHANGELOG.md
 ---
 
@@ -69,4 +69,4 @@ Full table definitions: `design/data-model.md`.
 
 | Version | Date | CR | Aligned to PRD | Summary |
 |---|---|---|---|---|
-| 1.0 | 2026-08-22 | — | 1.0 | Initial HLD |
+| 1.0 | 2026-08-23 | — | 1.0 | Initial HLD |

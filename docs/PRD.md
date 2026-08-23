@@ -3,7 +3,7 @@ document: PRD
 product: Jyotech Agent
 version: 1.0
 status: Approved
-date: 2026-08-22
+date: 2026-08-23
 owner: Arnab Sharma (Nyalazone)
 changelog: see CHANGELOG.md
 ---
@@ -83,4 +83,4 @@ The Jyotech Agent is a customer-facing chatbot embedded on jyotech.com that qual
 
 | Version | Date | CR | Summary |
 |---|---|---|---|
-| 1.0 | 2026-08-22 | — | Initial approved PRD for Iteration 1 |
+| 1.0 | 2026-08-23 | — | Initial approved PRD for Iteration 1 |
