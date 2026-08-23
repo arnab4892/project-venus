@@ -20,9 +20,11 @@ app = typer.Typer(help="agentkit framework CLI.", no_args_is_help=True)
 db_app = typer.Typer(help="Database migrations.", no_args_is_help=True)
 seed_app = typer.Typer(help="Seed data into facts.*.", no_args_is_help=True)
 tools_app = typer.Typer(help="Run a runtime tool from the shell.", no_args_is_help=True)
+ingest_app = typer.Typer(help="Crawl + convert client sources (stage 1).", no_args_is_help=True)
 app.add_typer(db_app, name="db")
 app.add_typer(seed_app, name="seed")
 app.add_typer(tools_app, name="tools")
+app.add_typer(ingest_app, name="ingest")
 
 # Repo root = two levels up from this file (src/agentkit/cli.py -> src -> root).
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -76,6 +78,54 @@ def seed_demo_cmd(
             counts = seed_demo(conn, client=client)
     total = sum(counts.values())
     typer.echo(f"Seeded {total} fact rows: " + ", ".join(f"{k}={v}" for k, v in counts.items()))
+
+
+@ingest_app.command("run")
+def ingest_run_cmd(
+    client: Optional[str] = typer.Argument(
+        None, help="Client id (default: the single clients/* dir)."
+    ),
+    rc: Optional[str] = typer.Option(
+        None, "--rc", help="Release-candidate id (default: rc.<client>.bootstrap)."
+    ),
+) -> None:
+    """Crawl + convert the client's sources to data/<client>/md/ and record staging rows.
+
+    Stage 1 only: no extraction, no LLM. Writes one staging.document row per
+    source (LLD-ING-05) and prints a conversion report.
+    """
+    from agentkit.db.engine import connect
+    from agentkit.ingest.pipeline import run_ingest
+    from agentkit.ingest.sources import autodetect_client
+
+    client = client or autodetect_client()
+    with connect() as conn:
+        with conn.begin():
+            report = run_ingest(client, rc_id=rc, conn=conn)
+    for line in report.summary_lines():
+        typer.echo(line)
+
+
+@ingest_app.command("verify")
+def ingest_verify_cmd(
+    client: Optional[str] = typer.Argument(
+        None, help="Client id (default: the single clients/* dir)."
+    ),
+) -> None:
+    """Verify converted Markdown against an independent witness (pdftotext / junk scan).
+
+    PDFs: assert the pdftotext token multiset appears in the Markdown. HTML:
+    assert no banned junk patterns remain. Exits non-zero on any failure.
+    """
+    from agentkit.ingest.sources import autodetect_client
+    from agentkit.ingest.verify import run_verify
+
+    client = client or autodetect_client()
+    report = run_verify(client)
+    for line in report.lines():
+        typer.echo(line)
+    if not report.ok:
+        raise typer.Exit(code=1)
 
 
 @tools_app.command("match-capability")
