@@ -19,6 +19,7 @@ Supporting documents: `design/flow.md` (Mermaid flows, referenced by HLD), `desi
 3. Requirement IDs are never reused. A removed requirement stays in the PRD with status `Withdrawn` and the CR that withdrew it.
 4. Every CR lives in `changes/CR-nnnn.md` (template: `changes/_TEMPLATE.md`) and records: the PRD diff, the impact analysis (which HLD/LLD IDs change), the resulting document versions, and the code/test changes.
 5. A git tag `docs/prd-v1.2` marks each PRD version. `git diff docs/prd-v1.1 docs/prd-v1.2 -- docs/PRD.md` is the authoritative diff for a CR.
+6. **LLD clarification (the one exception to rule 2):** an edit that only adds implementation detail to an existing LLD item — contradicting no PRD requirement and no HLD decision — may be made directly as a MINOR LLD bump, with a revision-history row marked "clarification" and a CHANGELOG entry. If the edit touches a requirement's meaning or an HLD decision, it is not a clarification: open a CR. HLD has no such path.
 
 ## The change flow
 

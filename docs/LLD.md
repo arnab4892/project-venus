@@ -1,11 +1,11 @@
 ---
 document: LLD
 product: Jyotech Agent
-version: 1.0
+version: 1.1
 aligned_to_hld: 1.0
 aligned_to_prd: 1.0
 status: Approved
-date: 2026-08-22
+date: 2026-08-24
 changelog: see CHANGELOG.md
 ---
 
@@ -77,8 +77,8 @@ docs/                    # this folder
 
 | ID | Item |
 |---|---|
-| LLD-RET-01 | Chunk by heading, target 400–600 tokens, 60-token overlap, table rows never split; `family_ids` tagged from the frozen family list by name match + extractor output. |
-| LLD-RET-02 | Embedding model `bge-m3` (1024-d) via `EMBED_BASE_URL`; batch 64. |
+| LLD-RET-01 | Chunk by heading, target 400–600 tokens, 60-token overlap; a table is kept whole unless it would exceed the embed limit, in which case it is split by rows with the header row repeated in every part; `family_ids` tagged from the frozen family list by name match + extractor output. |
+| LLD-RET-02 | Embedding model `bge-m3` (1024-d) via `EMBED_BASE_URL`; batch 64. The embedder MUST (a) set the provider context window explicitly per request (for Ollama: `num_ctx`, ≥ max chunk tokens + margin), (b) count tokens per chunk and raise `ChunkTooLargeError` if `token_count ≥ embed_limit` — never rely on provider-side silent truncation, and (c) log the effective limit at startup. One golden question (LLD-EVAL-01) must target content at the END of the longest chunk as a truncation canary. |
 | LLD-RET-03 | Hybrid retrieval: cosine top-20 ∪ FTS top-20 → reciprocal rank fusion → top-k (k=5), with SQL pre-filter on `division` and `family_ids && :families`. |
 
 ## 6. Tool layer (LLD-TOOL) — implements HLD-C-05
@@ -151,4 +151,5 @@ Each agent = prompt (from `ops.prompt_version`) + allowed tool list + output sch
 
 | Version | Date | CR | Aligned to HLD / PRD | Summary |
 |---|---|---|---|---|
+| 1.1 | 2026-08-24 | — (clarification) | 1.0 / 1.0 | LLD-RET-01/02: explicit embed context (`num_ctx`), loud `ChunkTooLargeError` instead of silent truncation, table-split rule, truncation-canary golden question. No requirement or HLD change. |
 | 1.0 | 2026-08-22 | — | 1.0 / 1.0 | Initial LLD |

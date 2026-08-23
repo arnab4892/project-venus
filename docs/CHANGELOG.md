@@ -2,6 +2,10 @@
 
 One entry per document version. Newest first.
 
+## 2026-08-24
+
+- **LLD 1.1** — clarification (no CR): LLD-RET-01/02 now require an explicit embed context window (`num_ctx` for Ollama), a loud `ChunkTooLargeError` instead of silent truncation, the split-long-tables-by-rows rule, and a truncation-canary golden question. Process rule 6 (LLD clarification path) added to docs/README.md.
+
 ## 2026-08-22
 
 - **PRD 1.0** — initial approved requirements for Iteration 1 (public content only). Tag `docs/prd-v1.0`.
