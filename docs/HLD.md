@@ -1,8 +1,8 @@
 ---
 document: HLD
 product: Jyotech Agent
-version: 1.0
-aligned_to_prd: 1.0
+version: 1.1
+aligned_to_prd: 1.1
 status: Approved
 date: 2026-08-23
 changelog: see CHANGELOG.md
@@ -37,7 +37,7 @@ Diagrams: `design/flow.md` §1 (system overview), §2 (ingestion), §3 (runtime)
 | HLD-C-05 | Tool layer | Six read-only tools over `facts.*`/`vec.*`. | PRD-F-003…005 | LLD §6 |
 | HLD-C-06 | Orchestrator | Session, triage, routing, grounding gate, logging to `ops.*`. | PRD-F-001, F-008, F-009, N-003 | LLD §7 |
 | HLD-C-07 | Intent sub-agents | Application Discovery, Product Advisor, Documents & Compliance, After-sales Intake, Commercial Routing, FAQ & Deflect. | PRD-F-002…007, F-013 | LLD §8 |
-| HLD-C-08 | Handoff service | Contact collection, consent, lead creation, reference number, email dispatch, region routing. | PRD-F-006, F-010, F-011 | LLD §9 |
+| HLD-C-08 | Handoff service | Contact collection, consent, lead creation, reference number, email dispatch, region routing to the published branch-office email for the region (fallback sales@). | PRD-F-006, F-010, F-011 | LLD §9 |
 | HLD-C-09 | Widget | Angular web component; message kinds; quick-start chips; "Talk to an engineer"; language. | PRD-F-010, F-012, N-004 | LLD §10 |
 | HLD-C-10 | Eval harness | Golden questions; release/prompt activation gate. | PRD-N-005 | LLD §11 |
 
@@ -69,4 +69,5 @@ Full table definitions: `design/data-model.md`.
 
 | Version | Date | CR | Aligned to PRD | Summary |
 |---|---|---|---|---|
+| 1.1 | 2026-08-23 | CR-0001 | 1.1 | HLD-C-08 region routing targets the published branch-office email for the region (fallback sales@); reflects the PRD-F-006 modify. |
 | 1.0 | 2026-08-23 | — | 1.0 | Initial HLD |

@@ -156,7 +156,7 @@ flowchart TD
     L1 --> L2{"Consent + minimum<br/>fields present?"}
     L2 -->|No| L1
     L2 -->|Yes| L3["Create lead record (Postgres)"]
-    L3 --> L4["Email to sales@jyotech.com<br/>(+ regional office if after-sales)<br/>with transcript summary"]
+    L3 --> L4["Email with transcript summary<br/>(after-sales → branch-office To, sales@ Cc;<br/>else sales@)"]
     L4 --> L5["Confirm to user:<br/>reference no. + expected callback"]
     L5 --> END
 

@@ -1,9 +1,9 @@
 ---
 document: LLD
 product: Jyotech Agent
-version: 1.4
-aligned_to_hld: 1.0
-aligned_to_prd: 1.0
+version: 1.5
+aligned_to_hld: 1.1
+aligned_to_prd: 1.1
 status: Approved
 date: 2026-08-23
 changelog: see CHANGELOG.md
@@ -128,7 +128,7 @@ Each agent = prompt (from `ops.prompt_version`) + allowed tool list + output sch
 |---|---|
 | LLD-HO-01 | Contact form delivered as a `form` message kind (name, company, phone, whatsapp_ok, email, city) with consent checkbox; free-text fallback parsed by the handoff prompt. |
 | LLD-HO-02 | Region = `region_state(state)`; state inferred from city via a static city→state table, else asked. |
-| LLD-HO-03 | `route_to` = client `handoff_to.sales` + office email if non-null; subject `[{reference_no}] {lead_type label} – {summary} – {company} ({city}) – {REGION}`. |
+| LLD-HO-03 | Recipients by lead type. For `after_sales`: `to` = the published branch-office email for the region (`office.email` of the office `region_state(state).office_id`), `cc` = client `handoff_to.sales`; if no branch-office email is published, fall back to `to` = `handoff_to.sales` with the region in the subject. For other lead types: `to` = `handoff_to.sales` (+ office email if non-null). Subject `[{reference_no}] {lead_type label} – {summary} – {company} ({city}) – {REGION}`. |
 | LLD-HO-04 | Email via SMTP relay (`SMTP_URL`); `handoff_dispatch` row written before send, status updated after; retry 3× with backoff; on final failure the user still receives the reference number and ops is alerted. |
 | LLD-HO-05 | Emits `status` message "Sending…" then `text` confirmation (LLD-DB-04). |
 
@@ -154,6 +154,7 @@ Each agent = prompt (from `ops.prompt_version`) + allowed tool list + output sch
 
 | Version | Date | CR | Aligned to HLD / PRD | Summary |
 |---|---|---|---|---|
+| 1.5 | 2026-08-23 | CR-0001 | 1.1 / 1.1 | LLD-HO-03: after-sales routes `to` the published branch-office email for the region (`office.email` via `region_state.office_id`), `cc` sales@, with sales@-with-region-in-subject as the fallback; other lead types unchanged. Reflects the PRD-F-006 modify. |
 | 1.4 | 2026-08-23 | — (clarification, from milestone-2-notes) | 1.0 / 1.0 | Ingestion as built: sources.yaml-driven crawl with content-based excludes (LLD-ING-01), cleaner rules (ING-02), pypdfium backend + ACCURATE tables + tidy pass (ING-03), staging-only writes under bootstrap RC (ING-05), new LLD-ING-06 `ingest verify` (pdftotext witness; poppler dependency). New LLD-RET-04 design note: chunking disposition + paragraph dedup. |
 | 1.3 | 2026-08-23 | — (clarification, from milestone-1-notes) | 1.0 / 1.0 | Implemented decisions folded in: composite keying + one-active-release index + views-only rule (LLD-DB-02); staging scope = seven content tables, no cross-table FKs (LLD-DB-06); region_state as curated no-source fact table (new LLD-DB-07); headroom formula (LLD-TOOL-01); SCMD constant (LLD-EXT-09). |
 | 1.2 | 2026-08-23 | — (clarification) | 1.0 / 1.0 | LLD-DB-01: `0000_bootstrap` migration (vector extension + empty schemas) precedes `0001_init`; DB state lives in migrations, not docker init SQL. Confirmed in Step 0. |
