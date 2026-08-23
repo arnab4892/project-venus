@@ -1,7 +1,7 @@
 ---
 document: PRD
 product: Jyotech Agent
-version: 1.0
+version: 1.1
 status: Approved
 date: 2026-08-23
 owner: Arnab Sharma (Nyalazone)
@@ -51,7 +51,7 @@ The Jyotech Agent is a customer-facing chatbot embedded on jyotech.com that qual
 | PRD-F-003 | The agent shall place a stated duty inside, near the edge of, or outside Jyotech's *published* capability ranges and say which, citing the catalogue section. | P-1 | Must | Active |
 | PRD-F-004 | The agent shall answer fire/rescue/diving product questions using exact printed model names and only printed attributes. | P-3 | Must | Active |
 | PRD-F-005 | The agent shall answer company, certification, office and document questions and serve catalogue/certificate links. | P-2 | Must | Active |
-| PRD-F-006 | For service / spares / AMC requests the agent shall collect model, serial/year, site, need and contact, and route to the regional office for the customer's state, copying sales@. It shall not give troubleshooting advice. | P-4 | Must | Active |
+| PRD-F-006 | For service / spares / AMC requests the agent shall collect model, serial/year, site, need and contact, and route the enquiry to the published branch-office email for the customer's region (copying sales@); where no branch-office email is published it shall fall back to sales@ with the region in the subject. It shall not give troubleshooting advice. | P-4 | Must | Active |
 | PRD-F-007 | Price, lead-time, dealer, export and any out-of-scope commercial question shall be routed to sales@ with the enquiry context, never answered. | P-1, P-5 | Must | Active |
 | PRD-F-008 | Every answer containing a fact shall carry a citation to the page or PDF section it came from. | all | Must | Active |
 | PRD-F-009 | If a claim cannot be grounded in the active content release the agent shall say it is not published and offer a handoff, rather than infer. | all | Must | Active |
@@ -75,7 +75,7 @@ The Jyotech Agent is a customer-facing chatbot embedded on jyotech.com that qual
 
 ## 7. Assumptions and open questions
 
-- A-1 Regional office emails are not printed publicly; after-sales routes to sales@ with region in the subject until Jyotech supplies them.
+- A-1 Branch-office emails are published on the website contact page; after-sales routes to the branch-office email for the customer's region (copying sales@), falling back to sales@ with region in the subject only where no office email is published. (Supersedes the original assumption that regional emails were not public — CR-0001.)
 - A-2 The MCH, Neptune, ProEye, Vega/Nova names are treated as product names as printed; whether they are Jyotech-manufactured or represented is to be confirmed with Jyotech (affects warranty/lead-time wording only, all out of scope).
 - Q-1 Embed mode: script tag vs iframe — decided in HLD.
 
@@ -83,4 +83,5 @@ The Jyotech Agent is a customer-facing chatbot embedded on jyotech.com that qual
 
 | Version | Date | CR | Summary |
 |---|---|---|---|
+| 1.1 | 2026-08-23 | CR-0001 | After-sales routes to the published branch-office email for the customer's region, copying sales@ (PRD-F-006 modified); assumption A-1 updated to reflect published office emails. |
 | 1.0 | 2026-08-23 | — | Initial approved PRD for Iteration 1 |
