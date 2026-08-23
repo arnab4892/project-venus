@@ -1,0 +1,5 @@
+# Jyotech client registry entry.
+# Minimal placeholder for the skeleton; handoff routing, theme and seeds are
+# filled in by later milestones (and mirrored into ops.client / ops.prompt_version).
+client_id: jyotech
+domain: www.jyotech.com

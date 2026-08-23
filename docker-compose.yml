@@ -1,0 +1,23 @@
+# Local Postgres 16 + pgvector for the Jyotech Agent.
+# Published on the non-standard host port 5433 (container stays on 5432) so it
+# never collides with a locally-installed Postgres on 5432.
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: jyotech-db
+    environment:
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: change-me
+      POSTGRES_DB: jyotech_v1
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent -d jyotech_v1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
