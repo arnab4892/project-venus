@@ -1,17 +1,17 @@
 ---
 document: LLD
 product: Jyotech Agent
-version: 1.5
-aligned_to_hld: 1.1
-aligned_to_prd: 1.1
+version: 1.6
+aligned_to_hld: 1.2
+aligned_to_prd: 1.2
 status: Approved
-date: 2026-08-23
+date: 2026-08-28
 changelog: see CHANGELOG.md
 ---
 
 # Low-Level Design — Jyotech Agent (Iteration 1)
 
-Stack: Python 3.12, LangGraph, SQLAlchemy + Alembic, Postgres 16 + pgvector, Docling (PDF/HTML → Markdown), Pydantic v2, FastAPI, Angular 18 web component. LLM and embeddings via an OpenAI-compatible internal endpoint (`LLM_BASE_URL`, `EMBED_BASE_URL`).
+Stack: Python 3.12, LangGraph, SQLAlchemy + Alembic, Postgres 16 + pgvector, Docling (PDF/HTML → Markdown), Pydantic v2, FastAPI, Angular 18 web component. Endpoints (all OpenAI-compatible): the runtime chat LLM (`LLM_BASE_URL`) and the embedding model (`EMBED_BASE_URL`) are self-hosted; the offline extractor's LLM (`EXTRACT_LLM_BASE_URL`) may be an external API, used only over public website/catalogue content (no customer data). When `EXTRACT_LLM_BASE_URL` is unset it defaults to `LLM_BASE_URL`.
 
 Repository layout (framework core + client registry):
 
@@ -51,6 +51,8 @@ docs/                    # this folder
 | LLD-ING-06 | `agentkit ingest verify` — mandatory post-ingest verifier and release precondition. PDF sources: an independent `pdftotext` (poppler) witness over the cached raw bytes yields a token multiset (numbers; units `Nm3/hr|lpm|Bar|Barg|kW|HP`; standards `API-618|ISO n:n|EN|NFPA`; models `MCH-*|ICON|VEGA|NOVA|NEPTUNE|PROEYE`) and every witness token must appear in the converted Markdown — image-only content is invisible to both sides, keeping the check honest. HTML sources: assert none of the banned junk patterns remain. Per-source PASS or exact missing tokens; non-zero exit on any failure. `ingest run` caches raw bytes to `data/<client>/raw/<sha>` and writes `data/<client>/ingest-manifest.json` to support offline verification. System dependency: poppler `pdftotext` (macOS `brew install poppler`; Linux `apt install poppler-utils`). |
 
 ## 3. Extractor (LLD-EXT) — implements HLD-C-02
+
+The extractor's LLM calls (section classification LLD-EXT-02, family discovery LLD-EXT-03, typed extraction LLD-EXT-04) use `EXTRACT_LLM_BASE_URL`, which may be an external API (HLD-005 / PRD-N-002); inputs are the converted public Markdown only. Evidence-substring, drop-and-log and staging-only rules are unchanged regardless of provider.
 
 | ID | Item |
 |---|---|
@@ -154,6 +156,7 @@ Each agent = prompt (from `ops.prompt_version`) + allowed tool list + output sch
 
 | Version | Date | CR | Aligned to HLD / PRD | Summary |
 |---|---|---|---|---|
+| 1.6 | 2026-08-28 | CR-0002 | 1.2 / 1.2 | Endpoints preamble: extractor LLM via `EXTRACT_LLM_BASE_URL` (may be external, public content only; defaults to `LLM_BASE_URL`), runtime chat + embeddings stay self-hosted. LLD-EXT §3 note added. |
 | 1.5 | 2026-08-23 | CR-0001 | 1.1 / 1.1 | LLD-HO-03: after-sales routes `to` the published branch-office email for the region (`office.email` via `region_state.office_id`), `cc` sales@, with sales@-with-region-in-subject as the fallback; other lead types unchanged. Reflects the PRD-F-006 modify. |
 | 1.4 | 2026-08-23 | — (clarification, from milestone-2-notes) | 1.0 / 1.0 | Ingestion as built: sources.yaml-driven crawl with content-based excludes (LLD-ING-01), cleaner rules (ING-02), pypdfium backend + ACCURATE tables + tidy pass (ING-03), staging-only writes under bootstrap RC (ING-05), new LLD-ING-06 `ingest verify` (pdftotext witness; poppler dependency). New LLD-RET-04 design note: chunking disposition + paragraph dedup. |
 | 1.3 | 2026-08-23 | — (clarification, from milestone-1-notes) | 1.0 / 1.0 | Implemented decisions folded in: composite keying + one-active-release index + views-only rule (LLD-DB-02); staging scope = seven content tables, no cross-table FKs (LLD-DB-06); region_state as curated no-source fact table (new LLD-DB-07); headroom formula (LLD-TOOL-01); SCMD constant (LLD-EXT-09). |

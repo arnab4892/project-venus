@@ -82,7 +82,7 @@ flowchart TD
     D --> F["Normalised Markdown<br/>+ source URL, page/section, fetched_at"]
     E --> F
 
-    F --> G["LLM extraction pass<br/>(schema-constrained)"]
+    F --> G["LLM extraction pass<br/>(schema-constrained;<br/>model may be external, public content only)"]
     G --> G1["Capability rows<br/>product_family, gas, type,<br/>lubricated?, cooling,<br/>capacity_min/max, pressure_min/max,<br/>standard, applications, source"]
     G --> G2["Product registry rows<br/>division, category, family,<br/>model/variant, description, source"]
     G --> G3["Document & entity rows<br/>PDF links, ISO certs,<br/>offices, contacts, industries served,<br/>named clients"]

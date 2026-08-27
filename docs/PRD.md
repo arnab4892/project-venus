@@ -1,9 +1,9 @@
 ---
 document: PRD
 product: Jyotech Agent
-version: 1.1
+version: 1.2
 status: Approved
-date: 2026-08-23
+date: 2026-08-28
 owner: Arnab Sharma (Nyalazone)
 changelog: see CHANGELOG.md
 ---
@@ -67,7 +67,7 @@ The Jyotech Agent is a customer-facing chatbot embedded on jyotech.com that qual
 | ID | Requirement | Priority | Status |
 |---|---|---|---|
 | PRD-N-001 | p95 turn latency ≤ 6 s; p50 ≤ 3 s. | Must | Active |
-| PRD-N-002 | Self-hosted open-source LLM and embedding model; no customer data leaves Nyalazone infrastructure. | Must | Active |
+| PRD-N-002 | The customer-facing runtime shall use a self-hosted open-source LLM and embedding model, and no customer data shall leave Nyalazone infrastructure. The offline content-extraction pipeline may use an external API LLM, restricted to public website/catalogue content (which carries no customer data); the embedding model remains self-hosted (runtime query and chunk vectors must share it). | Must | Active |
 | PRD-N-003 | Full conversation, agent and tool logs retained; PII (contact block) stored only after consent. | Must | Active |
 | PRD-N-004 | Widget theme and assets configurable per client; no Jyotech-specific code in the framework core. | Must | Active |
 | PRD-N-005 | A golden-question regression suite must pass before any content release or prompt version is activated. | Must | Active |
@@ -83,5 +83,6 @@ The Jyotech Agent is a customer-facing chatbot embedded on jyotech.com that qual
 
 | Version | Date | CR | Summary |
 |---|---|---|---|
+| 1.2 | 2026-08-28 | CR-0002 | PRD-N-002 scoped: the self-hosted-model and no-customer-data-egress rule applies to the customer-facing runtime; the offline extractor may use an external API LLM on public content only (embeddings stay self-hosted). |
 | 1.1 | 2026-08-23 | CR-0001 | After-sales routes to the published branch-office email for the customer's region, copying sales@ (PRD-F-006 modified); assumption A-1 updated to reflect published office emails. |
 | 1.0 | 2026-08-23 | — | Initial approved PRD for Iteration 1 |

@@ -2,6 +2,10 @@
 
 One entry per document version. Newest first.
 
+## 2026-08-28
+
+- **PRD 1.2 · HLD 1.2 · LLD 1.6** — CR-0002 (`changes/CR-0002.md`), propagated: PRD-N-002 scoped — self-hosted-model + no-customer-data-egress applies to the customer-facing runtime; the offline content-extractor may use an external API LLM on public content only (embeddings stay self-hosted). HLD-005 scoped + HLD-006/§5 data-egress notes; LLD endpoints preamble adds `EXTRACT_LLM_BASE_URL` (external-capable, defaults to `LLM_BASE_URL`) with an LLD-EXT §3 note; `config/` + `extract/` gain the extractor endpoint (new test `tests/extract/test_extractor_endpoint.py`). TRACEABILITY realigned PRD 1.2 → HLD 1.2 → LLD 1.6. Tag `docs/prd-v1.2` after commit.
+
 ## 2026-08-23
 
 - **PRD 1.1 · HLD 1.1 · LLD 1.5** — CR-0001 (`changes/CR-0001.md`), propagated: after-sales routes to the published branch-office email for the customer's region, copying sales@ (PRD-F-006 modified; assumption A-1 updated). HLD-C-08 region-routing wording refined; **LLD-HO-03** recipient selection reworked (after-sales `to` = branch-office email via `region_state.office_id`, `cc` = sales@, fallback sales@) — LLD-HO-04 mailer gains `cc`. TRACEABILITY realigned PRD 1.1 → HLD 1.1 → LLD 1.5. Tag `docs/prd-v1.1` after commit.
