@@ -1,0 +1,455 @@
+# Pass-1 family discovery (LLD-EXT-03) — REVIEW AND EDIT, then re-run extract.
+# Pass 2 treats this list as FROZEN: extractors assign only ids present here;
+# anything unassignable is flagged needs_family, never given a new id.
+families:
+- id: fam.oxygen_recip
+  division: industrial
+  category: Process Gas Compressors
+  name: Oxygen Compressors
+  summary: Reciprocating, non-lubricated, water-cooled compressors for oxygen service,
+    up to 20000 Nm3/hr and 50 Barg discharge, built to maker standard with API-618/EIGA
+    compliance.
+  source: doc.jyotech_catalog_process §OXYGEN COMPRESSORS; doc.process_gas_compressors
+- id: fam.process_recip
+  division: industrial
+  category: Process Gas Compressors
+  name: Process Compressors (Recip.)
+  summary: Reciprocating, lubricated or non-lubricated process gas compressors for
+    H2, hydrocarbon gases, natural gas, BOG and mixed gases, up to 25000 Nm3/hr and
+    1000 Barg.
+  source: doc.jyotech_catalog_process §PROCESS COMPRESSORS (RECIP.); doc.process_gas_compressors
+- id: fam.natural_gas_recip
+  division: industrial
+  category: Process Gas Compressors
+  name: Natural Gas Compressors (Motor & Gas Engine Driven)
+  summary: Lubricated, air-cooled, horizontal balanced-opposed reciprocating compressors
+    for upstream wellhead/gas-lift and midstream pipeline boosting, 10000–100000 SCMD,
+    up to 120 Barg, API-11P/ISO13631.
+  source: doc.jyotech_catalog_process §NATURAL GAS COMPRESSORS; doc.process_gas_compressors
+- id: fam.diaphragm_compressor
+  division: industrial
+  category: Process Gas Compressors
+  name: Diaphragm Compressors
+  summary: Diaphragm compressors for H2, O2, He, argon, toxic, ultra-pure and rare
+    gases; 5–500 Nm3/hr, discharge 80–850 bar, up to 200 kW.
+  source: doc.jyotech_catalog_process §DIAPHRAGM COMPRESSORS
+- id: fam.oxygen_cylinder_filling
+  division: industrial
+  category: Oxygen Compressors
+  name: Oxygen Cylinder Filling Compressors
+  summary: Non-lubricated reciprocating compressors for medical/industrial oxygen
+    cylinder filling (also CO2, H2, CO, N2, He, Ar), up to 260 Nm3/hr and 150/200
+    barg.
+  source: doc.jyotech_catalog_process §OXYGEN CYLINDER FILLING COMPRESSORS
+- id: fam.hp_air_gas_compressor
+  division: industrial
+  category: Medium & High Pressure Air & Gas Compressors & Boosters
+  name: MP/HP Air & Gas Compressors
+  summary: Medium/high pressure compressors up to 84 m3/hr and 350/420 barg for air,
+    N2, He and natural gas, motors up to 45 kW.
+  source: doc.jyotech_catalog_process §COMPRESSORS
+- id: fam.hp_air_gas_booster
+  division: industrial
+  category: Medium & High Pressure Air & Gas Compressors & Boosters
+  name: MP/HP Air & Gas Boosters
+  summary: High-pressure boosters up to 600 m3/hr, suction up to 8 barg, discharge
+    up to 350/420 barg, for air, N2, He, argon and natural gas.
+  source: doc.jyotech_catalog_process §BOOSTERS
+- id: fam.self_fuelling_cng
+  division: industrial
+  category: CNG / Biogas Compressors, Boosters & Composite Machines
+  name: Self Fuelling Compressors & Boosters
+  summary: Compact, skid-mountable CNG/biogas fuelling compressor packages, 3–40 m3/hr
+    at 200/250 barg, with 4.5 m hose and NGV1 nozzle, for small-to-medium plants and
+    housing societies.
+  source: doc.jyotech_catalog_process §SELF FUELLING COMPRESSORS & BOOSTERS
+- id: fam.hydraulic_cng_booster
+  division: industrial
+  category: CNG Boosters
+  name: Hydraulic CNG Boosters
+  summary: Air-cooled hydraulic CNG boosters for daughter booster stations, 250–2300
+    SCMH, suction 200 down to 30 barg, discharge 250 barg, PLC control, 22–110 kW.
+  source: doc.jyotech_catalog_process §HYDRAULIC CNG BOOSTERS; doc.cng_boosters
+- id: fam.portable_cng_booster
+  division: industrial
+  category: CNG Boosters
+  name: Portable CNG Boosters
+  summary: Portable air-cooled CNG boosters, suction 2–8 barg, discharge 250 barg,
+    55–800 lpm, up to 15 kW, with remote control panel and NGV1 hose.
+  source: doc.cng_boosters §Portable CNG Boosters
+- id: fam.online_cng_compressor
+  division: industrial
+  category: CNG / Biogas Compressors, Boosters & Composite Machines
+  name: Online CNG Compressors
+  summary: Online CNG compressor packages discharging at 250 barg with capacities
+    200–4400 Sm3/hr and 50–600 HP depending on configuration.
+  source: doc.cng_bio_gas_compressors §ONLINE CNG COMPRESSORS
+- id: fam.ccdu_3in1
+  division: industrial
+  category: CNG / Biogas Compressors, Boosters & Composite Machines
+  name: 3-in-1 Integrated Package Unit (CCDU)
+  summary: Integrated CNG package combining compressor, storage cascade, priority
+    fill panel, control panel and dispenser on a <5 sqm footprint; 250–600 SCMH at
+    250 Kg/cm2g.
+  source: doc.jyotech_catalog_process §3-IN-1 INTIGRATED PACKAGE UNIT (CCDU); doc.cng_bio_gas_compressors
+- id: fam.online_variable_inlet
+  division: industrial
+  category: CNG / Biogas Compressors, Boosters & Composite Machines
+  name: Online cum Variable Inlet Pressure Compressor
+  summary: Dual-role machine usable as daughter booster (no pipeline) and later as
+    online compressor; up to 1200 SCMH, suction 14–200 barg, discharge 250 barg, 120
+    HP.
+  source: doc.jyotech_catalog_process §ONLINE CUM VARIABLE INLET PRESSURE
+- id: fam.hydrogen_compressor
+  division: industrial
+  category: Hydrogen Gas Compressors and Fueling Systems
+  name: Hydrogen Compressors
+  summary: Diaphragm, hydraulic and hybrid non-lubricated hydrogen compressors up
+    to 850 barg discharge and 200 kW, for pipeline or trailer/LCV H2 supply.
+  source: doc.jyotech_catalog_process §HYDROGEN COMPRESSORS, §HYDRAULIC PISTON TYPE,
+    §DIAPHRAGM TYPE, §HYBRID TYPE
+- id: fam.hydrogen_fuelling_system
+  division: industrial
+  category: Hydrogen Gas Compressors and Fueling Systems
+  name: Hydrogen Fuelling Systems
+  summary: Quick-fill hydrogen dispensing systems with cascade sequence, H2 mass flow
+    meter, nozzle, breakaway and safety devices in weatherproof cabinet, Class 1 Div
+    1/2 Group B.
+  source: doc.jyotech_catalog_process §HYDROGEN FUELLING SYSTEMS
+- id: fam.biogas_hp_compressor
+  division: industrial
+  category: CNG / Biogas Compressors, Boosters & Composite Machines
+  name: High Pressure Bio Gas Horizontal Balance Opposed Reciprocating Compressor
+  summary: Lubricated biogas compressor up to 800 Nm3/hr, inlet 0.3–0.5 barg, outlet
+    250 barg, up to 260 kW, water/air cooled.
+  source: doc.jyotech_catalog_process §High Pressure Bio Gas Horizontal Balance Opposed
+    Reciprocating Compressor
+- id: fam.biogas_booster
+  division: industrial
+  category: CNG / Biogas Compressors, Boosters & Composite Machines
+  name: Reciprocating Bio Gas Booster
+  summary: Lubricated biogas booster up to 1200 Nm3/hr, inlet 7–14 barg, outlet 250
+    barg, up to 250 kW.
+  source: doc.jyotech_catalog_process §Reciprocating Bio Gas Booster
+- id: fam.biogas_lp_compressor
+  division: industrial
+  category: CNG / Biogas Compressors, Boosters & Composite Machines
+  name: Low Pressure Bio Gas Reciprocating Compressor
+  summary: Oil-free, water-cooled low-pressure biogas compressor up to 1800 Nm3/hr,
+    inlet 0.3 barg, outlet up to 50 barg.
+  source: doc.jyotech_catalog_process §Low Pressure Bio Gas Reciprocating Compressor
+- id: fam.biogas_low_capacity
+  division: industrial
+  category: CNG / Biogas Compressors, Boosters & Composite Machines
+  name: Low Capacity Bio Gas Compressor
+  summary: Air-cooled lubricated biogas compressor up to 150 m3/hr, inlet 0.1–0.3
+    barg, outlet up to 250 barg, up to 55 kW.
+  source: doc.jyotech_catalog_process §Low Capacity Bio Gas Compressor
+- id: fam.air_separation_plant
+  division: industrial
+  category: Air Separation Plants
+  name: Air Separation Plants
+  summary: Cryogenic and VPSA air separation plants for oxygen, nitrogen and argon,
+    gaseous and liquid, capacities up to 2000 TPD, including high-purity nitrogen
+    plants.
+  source: doc.jyotech_catalog_process §AIR SEPARATION PLANTS
+- id: fam.mch6_portable_bac
+  division: fire_rescue
+  category: Breathing Air Compressors
+  name: ICON / MCH6 Series Portable BA Compressor
+  summary: Portable light-duty high-pressure breathing air compressor, 100 lpm at
+    200/225 or 300/330 bar, motor or petrol engine drive, with auto stop/drain options.
+  source: doc.portable_compressor; doc.jyotech_catalog_f_s §ICON / MCH6 SERIES
+- id: fam.mch_smart_bac
+  division: fire_rescue
+  category: Breathing Air Compressors
+  name: MCH-13/16 Electric (Smart Series)
+  summary: Portable medium-duty BA compressor, 200–300 lpm at 200/225 or 300/330 bar,
+    4/5.5 kW three-phase motor, mountable on fire tenders.
+  source: doc.portable_compressor; doc.jyotech_catalog_f_s §MCH – 13 / 16 ELECTRIC
+    (SMART SERIES)
+- id: fam.mch_ergo_bac
+  division: fire_rescue
+  category: Breathing Air Compressors
+  name: MCH-13/16 & 21/23 Electric (Ergo Series)
+  summary: Medium-duty open-frame BA compressor, 200–380 lpm, 4–7.5 kW three-phase
+    motor with built-in control and safety panel.
+  source: doc.portable_compressor §MEDIUM DUTY OPEN MACHINES; doc.jyotech_catalog_f_s
+    §MCH – 13 / 16 & 21/23 ELECTRIC (ERGO SERIES)
+- id: fam.mch_engine_bac
+  division: fire_rescue
+  category: Breathing Air Compressors
+  name: MCH-16 Engine (Petrol / Diesel)
+  summary: Medium-duty BA compressor driven by 9–10 HP petrol or diesel engine, 265
+    lpm at 200/225 or 300/330 bar.
+  source: doc.portable_compressor; doc.jyotech_catalog_f_s §MCH-16 ENGINE
+- id: fam.mch_silent_bac
+  division: fire_rescue
+  category: Breathing Air Compressors
+  name: MCH-13/16 & 21/23 (Mark3 Silent / Super Silent Series)
+  summary: Fully enclosed, sound-proofed medium/heavy-duty BA compressors, 200–380
+    lpm at up to 420 bar, with built-in automatic controls.
+  source: doc.jyotech_catalog_f_s §MCH – 13/16 & 21/23 (MARK3 SILENT / SUPER SILENT
+    SERIES)
+- id: fam.mch_high_capacity_bac
+  division: fire_rescue
+  category: Breathing Air Compressors
+  name: MCH-22/30/36/45 (Open and Silent)
+  summary: High-capacity BA filling station compressors, 400–750 lpm at 200/225 or
+    300/330 bar (optionally 420 bar), 7.5–15 kW, open or silent versions.
+  source: doc.jyotech_catalog_f_s §MCH – 22/30/36/45 (OPEN AND SILENT)
+- id: fam.fill_containment_cabinet
+  division: fire_rescue
+  category: Breathing Air Compressors
+  name: Fill Containment Cabinets
+  summary: Steel safety cabinets for filling one, two, four or twin SCBA/SCUBA cylinders,
+    containing residues inside the cabinet, filling connections included.
+  source: doc.jyotech_catalog_f_s §FILL CONTAINMENT CABINETS
+- id: fam.filling_panels
+  division: fire_rescue
+  category: Breathing Air Compressors
+  name: Filling Panels
+  summary: Single/double pressure remote charging panels for cylinder filling stations.
+  source: doc.jyotech_catalog_f_s §FILLING PANELS
+- id: fam.eolo330_lpba
+  division: fire_rescue
+  category: Low Pressure Breathing Air Systems
+  name: Portable LPBA Compressor EOLO 330
+  summary: Portable single-stage low-pressure direct-breathing compressor, 330 lpm
+    at 8 bar, motor or petrol engine, single/double user outlets, for mask, octopus
+    or air-line use.
+  source: doc.jyotech_catalog_f_s §PORTABLE LPBA COMPRESSOR EOLO 330; doc.low_pressure_breathing_air_system
+- id: fam.lpba_system_trailers
+  division: fire_rescue
+  category: Low Pressure Breathing Air Systems
+  name: LP & HP BA System & Trailers
+  summary: Skid or trailer-mounted breathing air systems with oil-free compressor,
+    stand-by receiver, filtration, online CO monitoring and 4/6/8 user outlets; safe
+    or hazardous area versions, 20–150 cfm.
+  source: doc.jyotech_catalog_f_s §LP & HP BA SYSTEM & TRAILERS; doc.low_pressure_breathing_air_system
+- id: fam.lpba_filtration
+  division: fire_rescue
+  category: Low Pressure Breathing Air Systems
+  name: LPBA Filtration Systems
+  summary: Portable or fixed/panel-mounted 3-stage breathing air filtration systems
+    converting plant air to Grade D breathing air, with CO/CO-O2 monitoring, 15–250
+    cfm (custom to 3000 cfm).
+  source: doc.jyotech_catalog_f_s §LPBA FILTRATION SYSTEMS; doc.low_pressure_breathing_air_system
+- id: fam.smoke_exhauster
+  division: fire_rescue
+  category: Smoke Extractors & PPV Blowers
+  name: Smoke Exhausters
+  summary: Portable petrol engine or electric high-output smoke exhausters, 16–18
+    in. fans up to 14000 cfm, with flame/abrasion-resistant ducting options.
+  source: doc.jyotech_catalog_f_s §NPV-PPV SMOKE EXHAUSTERS, §SMOKE EXHAUSTER GASOLINE,
+    §SMOKE EXHAUSTER ELECTRIC
+- id: fam.ppv_blower
+  division: fire_rescue
+  category: Smoke Extractors & PPV Blowers
+  name: PPV Blowers
+  summary: Positive pressure ventilation blowers in gasoline, electric and battery-driven
+    versions, 16–24 in. fans, up to 24000 cfm; mostly AMCA certified.
+  source: doc.jyotech_catalog_f_s §PPV BLOWER GASOLINE, §PPV BLOWER ELECTRIC, §PPV
+    BLOWER BATTERY DRIVEN
+- id: fam.mobile_ventilation_unit
+  division: fire_rescue
+  category: Smoke Extractors & PPV Blowers
+  name: Mobile Ventilation Units
+  summary: Skid/trailer-mounted ventilation units with 110/133 HP turbo diesel engine,
+    hydraulic system and wired remote operating panel.
+  source: doc.jyotech_catalog_f_s §MOBILE VENTILATION UNITS
+- id: fam.venturi_blower
+  division: fire_rescue
+  category: Smoke Extractors & PPV Blowers
+  name: Venturi Blowers
+  summary: Compressed-air or steam operated venturi blowers, cast aluminium base,
+    up to 8000 cfm, for high-heat locations.
+  source: doc.jyotech_catalog_f_s §VENTURI BLOWERS
+- id: fam.smoke_machine
+  division: fire_rescue
+  category: Smoke Extractors & PPV Blowers
+  name: Smoke Machines
+  summary: Training smoke/fog machines up to 1500 W with continuous output, timer
+    control and daisy-chaining of up to four units.
+  source: doc.jyotech_catalog_f_s §SMOKE MACHINES
+- id: fam.hp_lifting_bags
+  division: fire_rescue
+  category: Air Lifting Bags & Accessories
+  name: HP Lifting Bags (8–15 Bar)
+  summary: High-pressure aramide-reinforced lifting bags (8, 10, 12 and 15 bar incl.
+    HFLAT, VEGA and NOVA series) for lifting the heaviest loads, capacities up to
+    100 tons, EN13731 certified.
+  source: doc.air_lifting_bags_and_accessories; doc.jyotech_catalog_f_s §HP LIFTING
+    BAGS, §VEGA & NOVA HP LIFTING BAGS
+- id: fam.lp_mp_lifting_bags
+  division: fire_rescue
+  category: Air Lifting Bags & Accessories
+  name: LP & MP Lifting Bags and Catch Bags
+  summary: Low-pressure (0.5 bar) and medium-pressure (1.0 bar) lifting bags with
+    Top Grip pads for lifting/uprighting large vehicles and structures, plus catch
+    bags for soft-landing vehicle recovery.
+  source: doc.air_lifting_bags_and_accessories; doc.jyotech_catalog_f_s §LOW PRESSURE
+    LIFTING BAGS
+- id: fam.leak_sealing_bags_bandage
+  division: fire_rescue
+  category: Hazmat Leak Control Kits
+  name: Leak Sealing Bags & Bandages
+  summary: Pneumatic leak sealing bags (mini, large, drainage types; 1.5/6/10 bar)
+    and chemical-resistant sealing bandages for tanks, pipes and containers in petroleum
+    and chemical industries.
+  source: doc.jyotech_catalog_f_s §LEAK SEALING BAGS & BANDAGE
+- id: fam.vacuum_drainage_bag
+  division: fire_rescue
+  category: Hazmat Leak Control Kits
+  name: Vacuum Drainage Bag
+  summary: Vacuum sealing drainage bag for leak sealing on surfaces that cannot be
+    strapped, using an 8 bar air source, with ball valve and venting/drainage hose.
+  source: doc.jyotech_catalog_f_s §VACUUM DRAINAGE BAG
+- id: fam.pipe_plug_kit
+  division: fire_rescue
+  category: Hazmat Leak Control Kits
+  name: Pipe Plug Kit
+  summary: Oil-resistant pipe plug kits with electrostatic properties for sealing
+    pipe leaks, including municipal pipe plugs.
+  source: doc.jyotech_catalog_f_s §PIPE PLUG KIT
+- id: fam.leak_sealing_lances
+  division: fire_rescue
+  category: Hazmat Leak Control Kits
+  name: Leak Sealing Lances (Wedges & Cones)
+  summary: Wedge and cone lance set for sealing holes at a distance and round punctures,
+    working at 1.5 bar, supplied in portable carry case.
+  source: doc.jyotech_catalog_f_s §LEAK SEALING LANCES (WEDGES & CONES)
+- id: fam.sealing_tube
+  division: fire_rescue
+  category: Hazmat Leak Control Kits
+  name: Sealing Tube
+  summary: Sealing tubes for fast temporary pipe leak sealing, lengths 150–350 cm,
+    with sealing pad and 10 bar foot pump in carry case.
+  source: doc.jyotech_catalog_f_s §SEALING TUBE
+- id: fam.flange_sealing_kit
+  division: fire_rescue
+  category: Hazmat Leak Control Kits
+  name: Flange Sealing Kit
+  summary: Kits for sealing leakages on pipe flange connections, covering pipes up
+    to 4.5 inch diameter.
+  source: doc.jyotech_catalog_f_s §FLANGE SEALING KIT
+- id: fam.hydraulic_rescue_tools
+  division: fire_rescue
+  category: Hydraulic Rescue Tools
+  name: Hydraulic Cutting Tools (Combi Tools, Cutters, Spreaders, Rams)
+  summary: EN13204-certified hydraulic rescue tools including combi tools, cutters,
+    spreaders and ram sets/spreaders with pumps and accessories, plus battery-powered
+    NFPA 1936 compliant tools.
+  source: doc.hydraulic_cutting_tools; doc.jyotech_catalog_f_s §COMBI TOOLS, §RAM
+    SETS & RAM SPREADERS
+- id: fam.battery_rescue_tools
+  division: fire_rescue
+  category: Hydraulic Rescue Tools
+  name: Battery Powered Hydraulic Tools
+  summary: NFPA 1936 (2020) certified battery-powered combi-tools, cutters, spreaders
+    and telescopic rams for urban rescue operations.
+  source: doc.hydraulic_cutting_tools §Battery Powered tools; doc.jyotech_catalog_f_s
+    §BATTERY POWERED COMBI-TOOL / SPREADER / TELESCOPIC RAM
+- id: fam.human_life_detector
+  division: fire_rescue
+  category: Search & Rescue Equipment
+  name: Human Life Detector
+  summary: Instrument detecting only living humans up to 500 m for disaster search,
+    security/border patrolling and mine rescue, without entering the area and requiring
+    no power supply.
+  source: doc.fire_protection_disaster_management_equipment; doc.jyotech_catalog_f_s
+    §SECURITY SEARCH / BORDER PATROLLING
+- id: fam.victim_location_camera
+  division: fire_rescue
+  category: Search & Rescue Equipment
+  name: Search Camera – Victim Location Unit
+  summary: PROEYE 951.S series victim location search cameras with color video, 2-way
+    audio, telescopic probe, motorized articulating head waterproof to 60 m; options
+    for underwater and borewell search.
+  source: doc.fire_protection_disaster_management_equipment; doc.jyotech_catalog_f_s
+    §SEARCH CAMERA – VICTIM LOCATION UNIT
+- id: fam.underwater_ba_set
+  division: diving
+  category: Diving Equipment
+  name: Under Water Breathing Apparatus Set (BASCCA)
+  summary: Self-contained compressed air underwater BA sets in single-cylinder (1600
+    L+) and twin-cylinder (2000–4000 L) configurations with full-face integrated diving
+    mask, EN250/1809 compliant, for search, rescue and recovery.
+  source: doc.under_water_breathing_apparatus_set; doc.jyotech_catalog_f_s §SINGLE
+    / TWIN CYLINDER UNDER WATER B.A. SET
+- id: fam.full_face_diving_mask
+  division: diving
+  category: Diving Equipment
+  name: Full Face Integrated Diving Masks / Kits
+  summary: Professional/rescue integrated diving masks (Space Extender, Pre-Dator,
+    Iron Mask, G-Diver, Neptune III) with integrated regulator, cold-water certification
+    and communication accessories; full-face snorkel masks also offered.
+  source: doc.diving_accessories; doc.jyotech_catalog_f_s §FULL FACE INTEGRATED DIVING
+    MASKS / KITS, §NEPTUNE III
+- id: fam.diving_lights
+  division: diving
+  category: Diving Equipment
+  name: Torches, Head Mounted Lights, Surface Powered Lights
+  summary: Hand-held, head-mounted or mask-mounted rechargeable dive lights from 1000
+    to 10000 lumen.
+  source: doc.diving_accessories; doc.jyotech_catalog_f_s §TORCHES, HEAD MOUNTED LIGHTS,
+    SURFACE POWERED LIGHTS
+- id: fam.diving_accessories
+  division: diving
+  category: Diving Equipment
+  name: Diving Accessories
+  summary: Octopus, first-stage regulators, dual tank valves, Q/C or swivel connections,
+    optical lens supports, pony tanks, dive computers and wet/dry suits.
+  source: doc.diving_accessories §OTHER ACCESSORIES; doc.under_water_breathing_apparatus_set
+    §OPTIONS/ACCESSORIES
+- id: fam.surface_demand_diving
+  division: diving
+  category: Diving Equipment
+  name: Surface Demand Diving Equipment
+  summary: Surface air control panels for one/two divers fed from HP cylinders or
+    LP compressor, with pressure reducers, gauges, optional pneumo and communication,
+    and 50 m+ umbilicals.
+  source: doc.surface_demand_diving_equipment; doc.jyotech_catalog_f_s §SURFACE DEMAND
+    DIVING EQUIPMENT
+- id: fam.uw_communication
+  division: diving
+  category: Diving Equipment
+  name: Under Water Communication
+  summary: Hard-wire and wireless diver-to-diver and diver-to-surface two-way audio
+    systems, plus underwater video camera with integrated audio and recording option.
+  source: doc.surface_demand_diving_equipment §UNDER WATER COMMUNICATION; doc.jyotech_catalog_f_s
+    §UNDER WATER COMMUNICATION
+- id: fam.scba_set
+  division: fire_rescue
+  category: Personal Protection Equipment
+  name: Self Contained Breathing Apparatus
+  summary: Positive-pressure SCBA with self-extinguishing harness, demand valve with
+    self-test, and IN/OUT configurations for second operator or second source connection.
+  source: doc.jyotech_catalog_f_s §SELF CONTAINED BREATHING APPARATUS
+- id: fam.eebd_escape
+  division: fire_rescue
+  category: Personal Protection Equipment
+  name: Emergency EEBD & Escape Hood Sets
+  summary: Emergency escape breathing devices and constant-flow escape hood sets (10/15
+    minute duration) compliant with EN 1146 / ISO 23269-1 and MED.
+  source: doc.jyotech_catalog_f_s §EMERGENCY EEBD SETS, §ESCAPE HOOD SETS
+- id: fam.gas_cbrn_mask
+  division: fire_rescue
+  category: Personal Protection Equipment
+  name: Full Face Gas Masks & CBRN Masks
+  summary: EN 136 class 3 full-face gas masks for particle/gas/combined filters and
+    CBRN masks with STANAG connections providing 24-hour CW agent protection.
+  source: doc.jyotech_catalog_f_s §FULL FACE GAS MASKS & CBRN MASKS
+- id: fam.firefighter_ppe
+  division: fire_rescue
+  category: Personal Protection Equipment
+  name: Fire Fighter Suits, Helmets & Boots
+  summary: Fire fighter turnout gear (EN 469 Nomex IIIA suits), gloves, hoods, boots
+    and EN 443 helmets in traditional and modern designs.
+  source: doc.jyotech_catalog_f_s §FIRE FIGHTER SUITS, HELMETS & BOOTS
+- id: fam.chemical_gas_tight_suit
+  division: fire_rescue
+  category: Personal Protection Equipment
+  name: Chemical Gas Tight Suits
+  summary: Gas-tight chemical protection suits to EN 943-1 Type 1a and EN 943-2.
+  source: doc.jyotech_catalog_f_s §CHEMICAL GAS TIGHT SUITS
