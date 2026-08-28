@@ -26,6 +26,8 @@ dependencies = [
     "beautifulsoup4>=4.12,<5.0",
     "lxml>=5.0,<7.0",
     "openpyxl>=3.1,<4.0",
+    # extraction LLM (CR-0002; OpenAI-compatible, external-capable)
+    "openai>=1.50,<2.0",
     # cli / misc
     "typer>=0.15,<1.0",
     "python-dotenv>=1.0,<2.0",

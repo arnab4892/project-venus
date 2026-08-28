@@ -3,6 +3,12 @@
 Reads the self-hosted LLM/embedding endpoints, the database URL and the SMTP
 relay from the environment or a local ``.env`` file. Secrets never live in code
 (see ``.env.example`` for the shape).
+
+Endpoints are scoped by stage (CR-0002 / LLD §0). The customer-facing **runtime**
+chat (``llm_base_url``) and the **embedding** model (``embed_base_url``) stay
+self-hosted. The offline **extractor** LLM (``extract_llm_base_url``) may be an
+external API — it runs over public website/catalogue content only — and falls
+back to the runtime chat endpoint/model when unset.
 """
 
 from __future__ import annotations
@@ -19,6 +25,9 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        # A blank env var (e.g. EXTRACT_LLM_TEMPERATURE=) means "unset": fall back to
+        # the field default (None) rather than trying to coerce "" into float/int.
+        env_ignore_empty=True,
     )
 
     # Database
@@ -32,8 +41,44 @@ class Settings(BaseSettings):
     embed_base_url: str = "http://embed.internal:8001/v1"
     embed_model: str = "bge-m3"
 
+    # Offline extractor LLM (CR-0002) — OpenAI-compatible, MAY be an external API
+    # (public content only). Empty means "fall back to the runtime chat endpoint":
+    # resolve via ``extractor_endpoint()`` rather than reading these fields raw.
+    extract_llm_base_url: str = ""
+    extract_llm_model: str = ""
+    extract_llm_api_key: str = ""
+
+    # Provider-specific sampling knobs — each is sent ONLY when set, so an endpoint
+    # that rejects a param (e.g. kimi-k3 forbids `temperature`) never sees it.
+    # `temperature` None → omitted (leave unset for kimi-k3; a self-hosted model may
+    # set 0 for determinism). `reasoning_effort` is a free-string passthrough
+    # (kimi-k3: low|high|max; sent via extra_body). `max_completion_tokens` None →
+    # provider default.
+    extract_llm_temperature: float | None = None
+    extract_llm_reasoning_effort: str | None = None
+    extract_llm_max_completion_tokens: int | None = None
+
+    # Optional extractor price per 1k tokens (external API cost reporting). Unset
+    # (None) → cost is reported as "n/a"; token totals are always reported.
+    # `cached_in` is the discounted price for prompt-cache-hit input tokens (kimi-k3
+    # caches repeated prompt prefixes); unset → cached tokens billed at the miss price.
+    extract_llm_price_in_per_1k: float | None = None
+    extract_llm_price_out_per_1k: float | None = None
+    extract_llm_price_cached_in_per_1k: float | None = None
+
     # Outbound email relay (handoff dispatch, LLD-HO-04)
     smtp_url: str = "smtp://user:pass@smtp.internal:587"
+
+    def extractor_endpoint(self) -> tuple[str, str, str]:
+        """Resolve the extractor ``(base_url, model, api_key)``.
+
+        ``extract_llm_base_url`` / ``extract_llm_model`` fall back to the
+        runtime ``llm_base_url`` / ``llm_model`` when unset (CR-0002). The API
+        key defaults to empty (self-hosted endpoints need none).
+        """
+        base_url = self.extract_llm_base_url or self.llm_base_url
+        model = self.extract_llm_model or self.llm_model
+        return base_url, model, self.extract_llm_api_key
 
 
 @lru_cache
