@@ -1,7 +1,7 @@
 ---
 document: LLD
 product: Jyotech Agent
-version: 1.6
+version: 1.7
 aligned_to_hld: 1.2
 aligned_to_prd: 1.2
 status: Approved
@@ -36,7 +36,7 @@ docs/                    # this folder
 | LLD-DB-03 | `vec.chunk_embedding_<release>` created per release by the embedder; HNSW index `vector_cosine_ops`, `m=16, ef_construction=128`. | HLD-C-04 |
 | LLD-DB-04 | `ops.message` has `turn_id` FK, `seq_in_turn`, `kind ∈ {text, document_card, status, form}`; a turn owns 1..n messages in either role. | HLD-C-06 |
 | LLD-DB-05 | `ops.lead.reference_no` format `JYO-YYMM-NNNN`, sequence per client per month. | HLD-C-08 |
-| LLD-DB-06 | `staging.*` mirrors only the seven content tables (`document`, `product_family`, `product`, `capability_row`, `capability_gas`, `company_fact`, `office`) — the tables whose rows are LLM-proposed and human-reviewed — keyed by `release_candidate_id`, plus `evidence jsonb`, `confidence numeric`, `review_status ∈ {pending, approved, edited, rejected}`, `reviewer`, `reviewed_at`. No staging mirror for `release` (written by promote itself) or `region_state` (curated). Staging carries NO cross-table FKs — it holds unreviewed and rejected rows; FK closure is enforced at the release-import gate (LLD-REL-03), not in staging. | HLD-C-02, C-03 |
+| LLD-DB-06 | `staging.*` mirrors only the seven content tables (`document`, `product_family`, `product`, `capability_row`, `capability_gas`, `company_fact`, `office`) — the tables whose rows are LLM-proposed and human-reviewed — keyed by `release_candidate_id`, plus `evidence jsonb`, `confidence numeric`, `review_status ∈ {pending, approved, edited, rejected}`, `reviewer`, `reviewed_at`. No staging mirror for `release` (written by promote itself) or `region_state` (curated). Staging carries NO cross-table FKs — it holds unreviewed and rejected rows; FK closure is enforced at the release-import gate (LLD-REL-03), not in staging. Migration `0002` adds three extraction markers to every mirror — `conflict_group text` (links same-family/same-measure rows whose sources disagree; both rows staged verbatim, adjudicated by the reviewer, never auto-resolved), `needs_family boolean not null default false` (row unassignable to a frozen family; `family_id` stays null, ids are never invented), `section_id text` (the extraction section the row came from) — and the RC ledger `staging.release_candidate` `(id, client, created_at, status ∈ {open, exported, imported, promoted, abandoned})`. The mirrors deliberately carry **no FK** to the ledger (same no-FK stance); RC validity and status are enforced at the promote gate (LLD-REL-05). The ingest bootstrap RC (`rc.<client>.bootstrap`) is valid without a ledger row and is never promotable. | HLD-C-02, C-03 |
 | LLD-DB-07 | `facts.region_state` is curated configuration, not extracted content: columns `(state, release_id, region, office_id)` with composite FK to `office` and its own `active_` view; it carries no source columns (`source_doc_id` provenance is mandatory only for extracted facts) and enters via seed/release tooling, never via staging review. | HLD-C-08, HLD-001 |
 
 ## 2. Crawler & converter (LLD-ING) — implements HLD-C-01
@@ -54,28 +54,30 @@ docs/                    # this folder
 
 The extractor's LLM calls (section classification LLD-EXT-02, family discovery LLD-EXT-03, typed extraction LLD-EXT-04) use `EXTRACT_LLM_BASE_URL`, which may be an external API (HLD-005 / PRD-N-002); inputs are the converted public Markdown only. Evidence-substring, drop-and-log and staging-only rules are unchanged regardless of provider.
 
+Sampling is provider-configurable, not hard-coded: `EXTRACT_LLM_TEMPERATURE`, `EXTRACT_LLM_REASONING_EFFORT` and `EXTRACT_LLM_MAX_COMPLETION_TOKENS` are each sent **only when set** (blank env var = unset; some providers reject a fixed `temperature`, e.g. Moonshot kimi-k3 fixes it at 1.0) — faithfulness comes from strict `response_format` json_schema decoding plus the evidence gate, not from a temperature value. Invalid responses are retried at most 3 times, then the section is logged and skipped. Every call is logged to `data/<client>/extract/<rc>/llm-calls.jsonl` `{model, kind, section_id, tokens_in/out/cached, latency_ms, attempts, ok}`; cached-input tokens are detected across OpenAI/Moonshot/DeepSeek `usage` shapes (unknown shape → 0), and the run report prints token totals, prompt-cache hit rate and cost (cache-miss vs cache-hit input priced via `EXTRACT_LLM_PRICE_IN_PER_1K` / `_PRICE_CACHED_IN_PER_1K`; unset → "n/a").
+
 | ID | Item |
 |---|---|
-| LLD-EXT-01 | Section split on headings (H1–H3); each section carries `doc_id`, `heading_path`, page range. |
-| LLD-EXT-02 | Section classifier prompt → `{type ∈ capability_spec, product_list, company_fact, office_contact, other, confidence}`. `other` is skipped for facts (still chunked). |
-| LLD-EXT-03 | Pass 1 (family discovery): whole-document prompt proposes `product_family` candidates; human confirms list; list is frozen for pass 2. |
-| LLD-EXT-04 | Four extraction schemas in `clients/jyotech/schemas.py`, each field an `Evidenced[T] = {value, evidence}`; evidence must be a verbatim substring of the section text or the field is dropped and logged. |
+| LLD-EXT-01 | `extract/markdown.py` reads the converted md (front-matter + body) and splits on headings (H1–H3); each section carries `section_id` (`<doc_id>::sNNN`), `doc_id`, `heading_path`, page range (from `<!-- page N -->`; HTML → heading-path locator) and verbatim text. Run artifacts are files under `data/<client>/extract/<rc>/`: `sections.json`, `classification.json`, `drops.json`, `llm-calls.jsonl` (gitignored, like ingest's `md/`/`raw/`). |
+| LLD-EXT-02 | Section classifier prompt → `{type ∈ capability_spec, product_list, company_fact, office_contact, other, confidence}`. `other` is skipped for facts (still chunked). Classifications are cached in `classification.json` and reused on a pass-2 re-run. |
+| LLD-EXT-03 | Pass 1 (family discovery): whole-corpus prompt proposes `product_family` candidates, written to `clients/<client>/families.yaml`, and the run **stops** for human review (`--redo-families` reruns pass 1). The approved list is frozen for pass 2: extractors assign only ids present in it; an unassignable row gets `needs_family=true`, never an invented id. |
+| LLD-EXT-04 | Four extraction schemas in `clients/jyotech/schemas.py`, each field an `Evidenced[T] = {value, evidence}`. The verbatim gate lives in code (`extract/evidence.py`), not in the prompt: evidence must be an exact substring of the section (heading path + body) after whitespace normalisation, or the field is dropped and logged to `drops.json` — never repaired. |
 | LLD-EXT-05 | `CapabilityRowOut`: family_id (from frozen list), comp_type, lubricated, cooling, capacity {min,max,unit}, discharge_p {min,max,unit}, driver[], standards[], gases[]. |
 | LLD-EXT-06 | `ProductOut`: family_id, model_name (verbatim), variant, description, attributes (only printed). |
 | LLD-EXT-07 | `CompanyFactOut`: kind (enum: certification, founded, founder, facility, industry_served, client, coverage, contact), value, detail. |
 | LLD-EXT-08 | `OfficeOut`: name, city, state, address, phone, email, serves_divisions[]. Phone validated E.164-ish; city must resolve via `region_state`. |
-| LLD-EXT-09 | Numeric/unit normalisation in `extract/normalise.py`: "up to X" → max=X; Nm3/hr, Nm³/hr, NM3/HR → `Nm3/hr`; bar/barg → `barg`; SCMD kept, converted at query time with the documented constant `1 Nm3/hr = 24 SCMD` (day = 24 hours). |
-| LLD-EXT-10 | Writes to `staging.*` with `release_candidate_id`; never to `facts.*`. |
+| LLD-EXT-09 | Numeric/unit normalisation in `extract/normalise.py`: "up to X" → max=X; "X to Y" → (min,max); unit tokens stripped before number parsing (so `Nm3`'s digit is never read as a value); Nm3/hr, Nm³/hr, NM3/HR → `Nm3/hr`; bar/barg → `barg`; SCMD kept, converted at query time with the documented constant `1 Nm3/hr = 24 SCMD` (day = 24 hours). |
+| LLD-EXT-10 | Writes to `staging.*` with `release_candidate_id`; never to `facts.*`. RC idempotency: re-running extraction for an RC replaces only that RC's `pending` rows; `approved`/`edited`/`rejected` rows are never overwritten. A `staging.document` row per md is staged under the RC so it is a self-contained export unit. Prompts are file-based under `clients/<client>/prompts/` until the `ops.*` tables exist (`ops.prompt_version` loading is a later milestone). |
 
 ## 4. Review & release (LLD-REL) — implements HLD-C-03
 
 | ID | Item |
 |---|---|
-| LLD-REL-01 | `agentkit release export <rc>` writes an .xlsx with one sheet per staging table, columns incl. evidence and page link. |
-| LLD-REL-02 | `agentkit release import <rc> <xlsx>` applies `review_status`/edits. |
+| LLD-REL-01 | `agentkit release export <rc>` writes an .xlsx with one sheet per staging table: every value column carries its evidence quote in an adjacent `»evidence` column, plus provenance (`source_doc_id`, `source_locator`, `section_id`), `confidence`, `conflict_group`, `needs_family`, `review_status`, and an empty `reviewer_decision` column with an approve/edit/reject dropdown; frozen header row. Export advances the RC ledger status to `exported`. RC lifecycle lives in `release/candidate.py` (`release create` allocates `rc.<client>.NNNN`; `release list`). |
+| LLD-REL-02 | `agentkit release import <rc> <xlsx>` applies `review_status`/edits (`approve`/`edit`/`reject`; blank = stays `pending`, not promoted); children of rejected rows (e.g. `capability_gas` under a rejected `capability_row`) must not survive to promote. |
 | LLD-REL-03 | Integrity checks: FK closure, at least one capability row per industrial family, every office city resolves, no duplicate model names. |
 | LLD-REL-04 | Diff vs active release: any changed numeric in `capability_row` is listed and must be acknowledged. |
-| LLD-REL-05 | `agentkit release promote <rc>` → inserts approved rows into `facts.*` under new `release_id`, triggers embedding (LLD-RET), runs golden suite (LLD-EVAL); `activate` flips `is_active`; `rollback <release>` flips back. |
+| LLD-REL-05 | `agentkit release promote <rc>` → inserts approved/edited rows into `facts.*` under new `release_id`, triggers embedding (LLD-RET), runs golden suite (LLD-EVAL); `activate` flips `is_active`; `rollback <release>` flips back. Promote gate (supersedes the deliberately absent staging FK): **refuse any RC with no `staging.release_candidate` ledger row, or whose status is not `exported`/`imported`** — the bootstrap RC is thereby never promotable. `facts.product_family` is populated from the approved, frozen `clients/<client>/families.yaml` (staging's `product_family` mirror stays empty by design — families are curated input, not extracted content). |
 
 ## 5. Chunker & embedder (LLD-RET) — implements HLD-C-04
 
@@ -156,6 +158,7 @@ Each agent = prompt (from `ops.prompt_version`) + allowed tool list + output sch
 
 | Version | Date | CR | Aligned to HLD / PRD | Summary |
 |---|---|---|---|---|
+| 1.7 | 2026-08-28 | — (clarification, from milestone-3a-notes) | 1.2 / 1.2 | Extraction as built: `0002` staging additions (`conflict_group`, `needs_family`, `section_id`; `release_candidate` ledger, no-FK stance) in LLD-DB-06; provider-configurable sampling + call logging + cache-aware cost reporting in LLD-EXT §3; section/artifact details (EXT-01/02), families.yaml stop + frozen-family rule (EXT-03), code-level evidence gate (EXT-04), range parsing (EXT-09), RC idempotency + file-based prompts (EXT-10); export as built + RC lifecycle (REL-01), import decision semantics (REL-02), promote ledger-status gate + product_family from families.yaml (REL-05). |
 | 1.6 | 2026-08-28 | CR-0002 | 1.2 / 1.2 | Endpoints preamble: extractor LLM via `EXTRACT_LLM_BASE_URL` (may be external, public content only; defaults to `LLM_BASE_URL`), runtime chat + embeddings stay self-hosted. LLD-EXT §3 note added. |
 | 1.5 | 2026-08-23 | CR-0001 | 1.1 / 1.1 | LLD-HO-03: after-sales routes `to` the published branch-office email for the region (`office.email` via `region_state.office_id`), `cc` sales@, with sales@-with-region-in-subject as the fallback; other lead types unchanged. Reflects the PRD-F-006 modify. |
 | 1.4 | 2026-08-23 | — (clarification, from milestone-2-notes) | 1.0 / 1.0 | Ingestion as built: sources.yaml-driven crawl with content-based excludes (LLD-ING-01), cleaner rules (ING-02), pypdfium backend + ACCURATE tables + tidy pass (ING-03), staging-only writes under bootstrap RC (ING-05), new LLD-ING-06 `ingest verify` (pdftotext witness; poppler dependency). New LLD-RET-04 design note: chunking disposition + paragraph dedup. |
