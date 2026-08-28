@@ -21,10 +21,14 @@ db_app = typer.Typer(help="Database migrations.", no_args_is_help=True)
 seed_app = typer.Typer(help="Seed data into facts.*.", no_args_is_help=True)
 tools_app = typer.Typer(help="Run a runtime tool from the shell.", no_args_is_help=True)
 ingest_app = typer.Typer(help="Crawl + convert client sources (stage 1).", no_args_is_help=True)
+extract_app = typer.Typer(help="Extract facts to staging (LLM).", no_args_is_help=True)
+release_app = typer.Typer(help="Release candidates + review export.", no_args_is_help=True)
 app.add_typer(db_app, name="db")
 app.add_typer(seed_app, name="seed")
 app.add_typer(tools_app, name="tools")
 app.add_typer(ingest_app, name="ingest")
+app.add_typer(extract_app, name="extract")
+app.add_typer(release_app, name="release")
 
 # Repo root = two levels up from this file (src/agentkit/cli.py -> src -> root).
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -126,6 +130,112 @@ def ingest_verify_cmd(
         typer.echo(line)
     if not report.ok:
         raise typer.Exit(code=1)
+
+
+@extract_app.command("run")
+def extract_run_cmd(
+    client: Optional[str] = typer.Argument(
+        None, help="Client id (default: the single clients/* dir)."
+    ),
+    rc: str = typer.Option(..., "--rc", help="Release-candidate id (from `release create`)."),
+    redo_families: bool = typer.Option(
+        False, "--redo-families", help="Re-run pass-1 family discovery, overwriting families.yaml."
+    ),
+) -> None:
+    """Extract facts to staging under RC (LLD-EXT). Pauses at families.yaml (pass 1).
+
+    First run (no families.yaml) proposes the family list and STOPS for review.
+    Re-run after approving families.yaml completes pass-2 typed extraction into
+    staging.*. Never writes to facts.*.
+    """
+    from openai import APIConnectionError
+
+    from agentkit.config import get_settings
+    from agentkit.db.engine import connect
+    from agentkit.extract.run import run_extract
+    from agentkit.ingest.sources import autodetect_client
+
+    client = client or autodetect_client()
+    try:
+        with connect() as conn:
+            with conn.begin():
+                report = run_extract(client, rc_id=rc, conn=conn, redo_families=redo_families)
+    except APIConnectionError:
+        base, _, _ = get_settings().extractor_endpoint()
+        typer.echo(
+            f"Cannot reach the extractor LLM at {base}. Set EXTRACT_LLM_BASE_URL "
+            "(and EXTRACT_LLM_MODEL / EXTRACT_LLM_API_KEY) to a reachable "
+            "OpenAI-compatible endpoint, then re-run. No staging rows were written."
+        )
+        raise typer.Exit(code=1) from None
+    for line in report.summary_lines():
+        typer.echo(line)
+
+
+@release_app.command("create")
+def release_create_cmd(
+    client: Optional[str] = typer.Argument(
+        None, help="Client id (default: the single clients/* dir)."
+    ),
+) -> None:
+    """Allocate the next release candidate rc.<client>.NNNN (status open)."""
+    from agentkit.db.engine import connect
+    from agentkit.ingest.sources import autodetect_client
+    from agentkit.release.candidate import create_rc
+
+    client = client or autodetect_client()
+    with connect() as conn:
+        with conn.begin():
+            rc_id = create_rc(conn, client)
+    typer.echo(f"Created {rc_id} (status open).")
+
+
+@release_app.command("list")
+def release_list_cmd(
+    client: Optional[str] = typer.Argument(
+        None, help="Client id (default: all clients)."
+    ),
+) -> None:
+    """List release candidates (newest first)."""
+    from agentkit.db.engine import connect
+    from agentkit.release.candidate import list_rc
+
+    with connect() as conn:
+        rows = list_rc(conn, client)
+    if not rows:
+        typer.echo("No release candidates.")
+        return
+    for r in rows:
+        typer.echo(f"{r['id']:24} {r['status']:10} {r['created_at']:%Y-%m-%d %H:%M}")
+
+
+@release_app.command("export")
+def release_export_cmd(
+    rc: str = typer.Argument(..., help="Release-candidate id, e.g. rc.<client>.0001."),
+    out: Optional[str] = typer.Option(
+        None, "--out", help="Output xlsx path (default: data/<client>/extract/<rc>/review-<rc>.xlsx)."
+    ),
+) -> None:
+    """Export the RC's staging rows to a review workbook (LLD-REL-01)."""
+    import re
+
+    from agentkit.db.engine import connect
+    from agentkit.release.export import export_rc
+
+    m = re.match(r"^rc\.(?P<client>.+)\.\w+$", rc)
+    if not m:
+        raise typer.BadParameter(f"unrecognised RC id {rc!r} (expected rc.<client>.NNNN)")
+    client = m.group("client")
+    out_path = Path(out) if out else (
+        _REPO_ROOT / "data" / client / "extract" / rc / f"review-{rc}.xlsx"
+    )
+    with connect() as conn:
+        with conn.begin():
+            counts = export_rc(conn, rc, out_path)
+    total = sum(counts.values())
+    typer.echo(f"Exported {total} rows to {out_path}")
+    for table, n in counts.items():
+        typer.echo(f"  {table:16} {n}")
 
 
 @tools_app.command("match-capability")
