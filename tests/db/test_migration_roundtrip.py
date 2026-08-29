@@ -98,25 +98,33 @@ def test_migration_roundtrip(monkeypatch):
         cfg = _alembic_config(test_url_str)
         eng = create_engine(test_url)
 
-        # upgrade → all schema objects present
+        # upgrade → all schema objects present (facts/staging + 0004 ops.*)
         command.upgrade(cfg, "head")
         with eng.connect() as c:
             assert _table_exists(c, "facts", "capability_row")
             assert _table_exists(c, "facts", "capability_gas")
             assert _view_exists(c, "facts", "active_capability_row")
             assert _table_exists(c, "staging", "capability_row")
+            # 0004: the full ops.* schema (LLD-DB-04, data-model §3)
+            for t in (
+                "client", "prompt_version", "session", "turn", "message",
+                "agent_invocation", "tool_call", "citation", "lead", "handoff_dispatch",
+            ):
+                assert _table_exists(c, "ops", t), f"missing ops.{t}"
 
         # downgrade to base → 0001 tables gone and 0000 drops the schemas
         command.downgrade(cfg, "base")
         with eng.connect() as c:
             assert not _schema_exists(c, "facts")
             assert not _schema_exists(c, "staging")
+            assert not _schema_exists(c, "ops")
 
         # upgrade again → back to a full schema (round-trip is clean)
         command.upgrade(cfg, "head")
         with eng.connect() as c:
             assert _table_exists(c, "facts", "capability_row")
             assert _view_exists(c, "facts", "active_capability_gas")
+            assert _table_exists(c, "ops", "message")
 
         eng.dispose()
     finally:

@@ -64,3 +64,42 @@ def seeded_conn(engine: Engine) -> Connection:
     finally:
         trans.rollback()
         conn.close()
+
+
+# --- runtime turn fixtures (shared by tests/runtime and tests/agents) -------
+
+@pytest.fixture()
+def make_ctx(seeded_conn):
+    """Factory: build a runtime ``Ctx`` with a given ``FakeLLM`` (+ optional embed seam).
+
+    Loads and activates the runtime prompt manifest so the orchestrator reads DB-versioned
+    prompts (not the file fallback).
+    """
+    from agentkit.runtime.orchestrator import Ctx
+    from tests.runtime._helpers import activate_all_prompts
+
+    activate_all_prompts(seeded_conn)
+
+    def _make(fake_llm, *, embed=None, gas_aliases=None):
+        from agentkit.client_config import gas_alias_map
+
+        return Ctx(
+            conn=seeded_conn,
+            client="jyotech",
+            complete=fake_llm,
+            embed=embed,
+            gas_aliases=gas_aliases if gas_aliases is not None else gas_alias_map("jyotech"),
+        )
+
+    return _make
+
+
+@pytest.fixture()
+def new_session(seeded_conn):
+    """Factory: create an ops.session on the seeded release and return its id."""
+    from agentkit.runtime.ops import create_session
+
+    def _make():
+        return create_session(seeded_conn, "jyotech", "r2026.08.1")
+
+    return _make

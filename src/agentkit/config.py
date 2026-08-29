@@ -33,9 +33,17 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql+psycopg://agent:change-me@localhost:5433/jyotech_v1"
 
-    # LLM (chat) endpoint — OpenAI-compatible, self-hosted
+    # LLM (chat) endpoint — OpenAI-compatible, self-hosted (runtime chat only, PRD-N-002)
     llm_base_url: str = "http://llm.internal:8000/v1"
     llm_model: str = ""
+
+    # Runtime chat sampling knobs — each sent ONLY when set (same discipline as the
+    # extractor knobs). qwen3 via Ollama accepts `temperature` (0 for determinism);
+    # `reasoning_effort` is a free-string passthrough via extra_body; `max_completion_tokens`
+    # None → provider default. A blank env var means "unset" (env_ignore_empty).
+    llm_temperature: float | None = None
+    llm_reasoning_effort: str | None = None
+    llm_max_completion_tokens: int | None = None
 
     # Embedding endpoint — OpenAI-compatible, self-hosted
     embed_base_url: str = "http://embed.internal:8001/v1"
