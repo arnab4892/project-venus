@@ -23,7 +23,10 @@ questions:
       args: {gas: hydrogen, capacity: 3000, capacity_unit: "Nm3/hr", discharge_p: 350, lubricated: false}
       expect_ids: ["fam.process_recip"]
     retrieval:
-      query: "hydrogen process gas compressor API-618"
+      # Mirrors the application agent's retrieval: family-filtered to the matched process family
+      # (LLD-AG-01 fix), so the PROCESS catalogue chunk surfaces — not the hydrogen-fuelling page.
+      query: "Process Compressors (Recip.) hydrogen"
+      family_ids: ["fam.process_recip"]
       expect_doc: doc.jyotech_catalog_process
 
   - id: cap-hydrogen-small-kghr
