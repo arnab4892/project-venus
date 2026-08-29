@@ -219,7 +219,7 @@ doc.index    | html     | Home                                                | 
 | heading_path | text[] |
 | content_md | text |
 | token_count | int |
-| family_ids | text[] — families this chunk talks about |
+| family_ids | text[] — families this chunk talks about (tagged mechanically from facts rows + name matches, never by an LLM); a chunk's division is derived via family_ids → product_family.division |
 | tsv | tsvector (FTS) |
 
 ```

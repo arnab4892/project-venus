@@ -1,7 +1,7 @@
 ---
 document: LLD
 product: Jyotech Agent
-version: 1.8
+version: 1.9
 aligned_to_hld: 1.2
 aligned_to_prd: 1.2
 status: Approved
@@ -83,14 +83,14 @@ Sampling is provider-configurable, not hard-coded: `EXTRACT_LLM_TEMPERATURE`, `E
 
 | ID | Item |
 |---|---|
-| LLD-RET-01 | Chunk by heading, target 400–600 tokens, 60-token overlap; a table is kept whole unless it would exceed the embed limit, in which case it is split by rows with the header row repeated in every part; `family_ids` tagged from the frozen family list by name match + extractor output. |
-| LLD-RET-02 | Embedding model `bge-m3` (1024-d) via `EMBED_BASE_URL`; batch 64. The embedder MUST (a) set the provider context window explicitly per request (for Ollama: `num_ctx`, ≥ max chunk tokens + margin), (b) count tokens per chunk and raise `ChunkTooLargeError` if `token_count ≥ embed_limit` — never rely on provider-side silent truncation, and (c) log the effective limit at startup. One golden question (LLD-EVAL-01) must target content at the END of the longest chunk as a truncation canary. |
+| LLD-RET-01 | Chunk by heading, target 400–600 tokens, 60-token overlap; a table is kept whole unless it would exceed the embed limit, in which case it is split by rows with the header row repeated in every part; `family_ids` tagged **mechanically, never by an LLM**: the active release's facts rows whose `source_doc_id` + section heading the chunk covers, ∪ frozen family-name matches in the chunk text. A chunk's `division` is derived via `family_ids → product_family.division` (documents carry no division of their own); the retrieval pre-filter joins through families. |
+| LLD-RET-02 | Embedding model `bge-m3` (1024-d) via `EMBED_BASE_URL`; batch 64. The embedder MUST (a) set the provider context window explicitly per request (for Ollama: `num_ctx`, ≥ max chunk tokens + margin), (b) count tokens per chunk and raise `ChunkTooLargeError` if `token_count ≥ embed_limit` — never rely on provider-side silent truncation, and (c) log the effective limit at startup. Token counts use the real bge-m3 tokenizer, configured via `embed_tokenizer` (repo id, resolved from the local HF cache) or `embed_tokenizer_path` (local file, for air-gapped installs) — no per-request network (PRD-N-002). One golden question (LLD-EVAL-01) must target content at the END of the longest chunk as a truncation canary, pinned by **locator** (stable across re-chunking), never by chunk id. |
 | LLD-RET-03 | Hybrid retrieval: cosine top-20 ∪ FTS top-20 → reciprocal rank fusion → top-k (k=5), with SQL pre-filter on `division` and `family_ids && :families`. |
-| LLD-RET-04 | (Design note — to be implemented in the chunking milestone.) Per-document chunking disposition `chunk / reference_only / excluded`: computed by junk heuristics (substantive word count after dropping headings/link-stubs/boilerplate; link-to-text ratio; fraction of paragraphs duplicated elsewhere in the corpus), overridable per document in sources.yaml, every non-`chunk` decision listed in the release report for human approval. `reference_only` keeps the document row and extracted facts but produces no chunks (e.g. the catalogue link-hub page). Plus corpus-wide paragraph-level dedup at chunk time: a normalised paragraph appearing in multiple documents is chunked once from a canonical source (prefer PDF/about page) and skipped elsewhere. |
+| LLD-RET-04 | Per-document chunking disposition `chunk / reference_only / excluded`: seeded by junk heuristics (substantive word count after dropping headings/link-stubs/boilerplate; link-to-text ratio; fraction of paragraphs duplicated elsewhere in the corpus), written to the dedicated human-editable `clients/<client>/seeds/chunking.yaml` (not sources.yaml). `agentkit chunk run` writes the yaml + a disposition report and **stops** for human approval before any embedding; a re-run applies the approved yaml. `reference_only` keeps the document row and extracted facts but produces no chunks (e.g. the catalogue link-hub page). Plus corpus-wide paragraph-level dedup at chunk time: a normalised paragraph appearing in multiple documents is chunked once from a canonical source (prefer PDF/about page) and skipped elsewhere. |
 
 ## 6. Tool layer (LLD-TOOL) — implements HLD-C-05
 
-All tools are pure functions over the `facts.active_*` views, return JSON, and log to `ops.tool_call`.
+All tools are pure functions over the `facts.active_*` views and return JSON. Logging to `ops.tool_call` begins in the runtime milestone (the `ops.*` tables are not yet created); until then the tools carry no side effects.
 
 | ID | Tool | Signature → result |
 |---|---|---|
@@ -150,14 +150,15 @@ Each agent = prompt (from `ops.prompt_version`) + allowed tool list + output sch
 
 | ID | Item |
 |---|---|
-| LLD-EVAL-01 | `clients/jyotech/golden/questions.yaml`: `{id, question, expected_answer_contains[], expected_source_ids[], expected_outcome}` — initial set of 40 (15 capability, 10 product, 8 company/docs, 5 after-sales, 2 out-of-scope). |
+| LLD-EVAL-01 | `clients/jyotech/golden/questions.yaml`: `{id, question, expected_answer_contains[], expected_source_ids[], expected_outcome}` plus optional `fact:`/`retrieval:` execution blocks the runner scores — frozen set of **46** (18 capability — incl. the 25000-capacity guard, the SCMD unit-conversion case and a Hinglish e2e-only question (PRD-F-012); 12 product — incl. price→handoff and the null-`model_name` case; 8 company/docs — incl. the locator-pinned truncation canary; 6 after-sales; 2 out-of-scope). Maintenance rule: natural ids pinned in the suite (`cf.*`, `off.*`, `cap.*`) follow extraction section numbering, so a re-extraction updates the suite alongside that release's diff review. |
 | LLD-EVAL-02 | Three layers: fact-level (tool call returns expected ids), retrieval (expected chunk in top-k), end-to-end (agent answer contains/omits). |
-| LLD-EVAL-03 | Run on `release promote` and on `prompt activate`; any failure blocks activation. |
+| LLD-EVAL-03 | Run on `release activate` — the tools read the `active_*` views, so a release can only be evaluated once active: any fact/retrieval failure **rolls the activation back** (promote triggers embedding best-effort in its own transaction; an unreachable embedder warns, never rolls promote back). `prompt activate` is gated the same way from the runtime milestone. |
 
 ## 12. Revision history
 
 | Version | Date | CR | Aligned to HLD / PRD | Summary |
 |---|---|---|---|---|
+| 1.9 | 2026-08-29 | — (clarification, from milestone-4-notes) | 1.2 / 1.2 | Retrieval/tools/eval as built: mechanical family tagging + derived chunk division (RET-01); bge-m3 tokenizer config + locator-pinned canary (RET-02); disposition in `chunking.yaml` with the chunk-run human gate (RET-04); tool logging deferred until `ops.*` exists (LLD-TOOL preamble); golden suite frozen at 46 with execution blocks + id-maintenance rule (EVAL-01); golden gate on `release activate` with rollback-on-failure, embedding best-effort at promote (EVAL-03). |
 | 1.8 | 2026-08-29 | — (clarification, from milestone-3b-notes) | 1.2 / 1.2 | Release machinery as built: `capability_gas` provenance inherited via parent FK (LLD-DB-02); `model_name` nullable when unprinted, migration `0003` + runtime display rule (LLD-EXT-06); LLD-REL-03 rewritten as the implemented check (hard failures incl. unit-on-numerics and the schema-driven NOT-NULL safety net, warnings, office→region mapping); LLD-REL-05 provenance scoping, families.yaml multi-source parsing, `rYYYY.MM.N` ids; LLD-TOOL-01 non-comparable-unit rule + deferred alias-map/null-boolean/vocabulary design note. |
 | 1.7 | 2026-08-28 | — (clarification, from milestone-3a-notes) | 1.2 / 1.2 | Extraction as built: `0002` staging additions (`conflict_group`, `needs_family`, `section_id`; `release_candidate` ledger, no-FK stance) in LLD-DB-06; provider-configurable sampling + call logging + cache-aware cost reporting in LLD-EXT §3; section/artifact details (EXT-01/02), families.yaml stop + frozen-family rule (EXT-03), code-level evidence gate (EXT-04), range parsing (EXT-09), RC idempotency + file-based prompts (EXT-10); export as built + RC lifecycle (REL-01), import decision semantics (REL-02), promote ledger-status gate + product_family from families.yaml (REL-05). |
 | 1.6 | 2026-08-28 | CR-0002 | 1.2 / 1.2 | Endpoints preamble: extractor LLM via `EXTRACT_LLM_BASE_URL` (may be external, public content only; defaults to `LLM_BASE_URL`), runtime chat + embeddings stay self-hosted. LLD-EXT §3 note added. |
