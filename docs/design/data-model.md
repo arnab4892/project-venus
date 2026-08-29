@@ -97,7 +97,7 @@ Named models / variants / kits. Sparse for industrial (ranges only), populated f
 |---|---|---|
 | product_id | text PK | |
 | family_id | text FK | |
-| model_name | text | as printed, exact casing |
+| model_name | text | as printed, exact casing; **null when the catalogue prints no model number** (migration `0003`) — runtime presents such a product by family name + variant, never an invented name |
 | variant | text | nullable |
 | description | text | verbatim-derived |
 | attributes | jsonb | only what is printed (e.g. drive, fill rate if stated) |
@@ -127,7 +127,7 @@ The range envelope per family (see earlier explanation). Gases normalised to one
 | lubricated | bool | null = not stated |
 | cooling | text | |
 | capacity_min / capacity_max | numeric | null = not stated |
-| capacity_unit | text | `Nm3/hr` or `SCMD` |
+| capacity_unit | text | as printed after canonicalisation — `Nm3/hr`/`SCMD` for compressors; F&S/diving rows carry `cfm`, `lpm`, `lumen`, `tons`, `TPD`, `kg/hr`, `W` etc. A null or non-canonical unit makes the numeric non-comparable in `match_capability` (skipped, never guessed) |
 | discharge_p_min / discharge_p_max | numeric | |
 | pressure_unit | text | `barg` |
 | driver | text[] | |
@@ -141,7 +141,9 @@ cap.002 | fam.process_recip | reciprocating, vertical/V/W/horizontal     | false
 cap.003 | fam.natgas_hbo    | reciprocating, horizontal balanced-opposed | true       | air     | 10000        | 100000       | SCMD          | 120             | {gas engine, electric motor}| {API-11P, ISO 13631}
 ```
 
-`facts.capability_gas (cap_id, gas)`
+`facts.capability_gas (cap_id, gas)` — a pure child of `capability_row`: it carries no source
+columns; provenance is inherited through the composite same-release FK to its parent, and at
+promote a gas row survives only if its parent survives (LLD-REL-05).
 
 ```
 cap.001 | oxygen
