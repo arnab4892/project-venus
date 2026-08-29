@@ -63,11 +63,21 @@ _DECISION_COL = "reviewer_decision"
 _DECISION_OPTIONS = '"approve,edit,reject"'
 
 
+def _is_blank(value: object) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, (list, tuple, dict, str)):
+        return len(value) == 0
+    return False
+
+
 def _cell(value: object) -> object:
     if isinstance(value, (list, tuple)):
-        return ", ".join(str(v) for v in value)
+        return ", ".join(str(v) for v in value) or None
     if isinstance(value, dict):
-        return "; ".join(f"{k}={v}" for k, v in value.items())
+        # Skip empty-valued entries so e.g. {"printed": []} renders blank, not "printed=[]".
+        parts = [f"{k}={_cell(v)}" for k, v in value.items() if not _is_blank(v)]
+        return "; ".join(parts) or None
     return value
 
 
@@ -97,6 +107,17 @@ def _write_sheet(ws: Worksheet, conn: Connection, rc_id: str, table: str) -> int
         {"rc": rc_id},
     ).mappings().all()
 
+    # capability_gas has no source columns of its own (provenance is the parent
+    # capability_row's, by design). Fill the sheet's provenance display-only.
+    parent_prov: dict[str, tuple[object, object]] = {}
+    if table == "capability_gas":
+        for pr in conn.execute(
+            text("SELECT cap_id, source_doc_id, source_locator FROM staging.capability_row "
+                 "WHERE release_candidate_id = :rc"),
+            {"rc": rc_id},
+        ).mappings():
+            parent_prov[pr["cap_id"]] = (pr["source_doc_id"], pr["source_locator"])
+
     for r in rows:
         evidence = r.get("evidence")
         line: list[object] = [r.get(natural_id)]
@@ -104,7 +125,12 @@ def _write_sheet(ws: Worksheet, conn: Connection, rc_id: str, table: str) -> int
             line.append(_cell(r.get(col)))
             if ekey is not None:
                 line.append(_evidence_quote(evidence, ekey))
-        line += [_cell(r.get(m)) for m in _META_COLUMNS]
+        meta_vals = {m: r.get(m) for m in _META_COLUMNS}
+        if table == "capability_gas":
+            sd, sl = parent_prov.get(r.get("cap_id"), (None, None))
+            meta_vals["source_doc_id"] = sd
+            meta_vals["source_locator"] = sl
+        line += [_cell(meta_vals[m]) for m in _META_COLUMNS]
         line.append(None)  # empty reviewer decision
         ws.append(line)
 

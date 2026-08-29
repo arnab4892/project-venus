@@ -1,0 +1,33 @@
+# Curated after-sales region routing (LLD-DB-07) — state -> region, keyed to a serving office.
+# Curated from the 12 reviewed offices of rc.jyotech.0001 (cities NOIDA, New Delhi, Mumbai,
+# Chennai, Kolkata, Singapore). region_state is configuration, NOT extracted content: it carries
+# no source columns and enters facts.* via the release tooling, never via staging review.
+#
+# `cities` is auxiliary — `release check` uses it to resolve an office's `city` to a state.
+# Only (state, region, office_id) is inserted into facts.region_state at promote. `office_id`
+# must be a surviving office in that region so the composite FK to facts.office closes.
+region_states:
+  - state: Uttar Pradesh
+    region: North
+    office_id: off.doc_contact_s000.0
+    cities: [NOIDA]
+  - state: Delhi
+    region: North
+    office_id: off.doc_jyotech_catalog_f_s_s090.1
+    cities: [NEW DELHI, DELHI]
+  - state: Maharashtra
+    region: West
+    office_id: off.doc_contact_s000.1
+    cities: [MUMBAI]
+  - state: Tamil Nadu
+    region: South
+    office_id: off.doc_contact_s000.2
+    cities: [CHENNAI]
+  - state: West Bengal
+    region: East
+    office_id: off.doc_contact_s000.3
+    cities: [KOLKATA]
+  - state: Singapore
+    region: Intl
+    office_id: off.doc_jyotech_catalog_f_s_s090.4
+    cities: [SINGAPORE]

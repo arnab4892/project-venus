@@ -238,6 +238,119 @@ def release_export_cmd(
         typer.echo(f"  {table:16} {n}")
 
 
+def _client_of(rc: str) -> str:
+    import re
+
+    m = re.match(r"^rc\.(?P<client>.+)\.\w+$", rc)
+    if not m:
+        raise typer.BadParameter(f"unrecognised RC id {rc!r} (expected rc.<client>.NNNN)")
+    return m.group("client")
+
+
+def _default_review_path(client: str, rc: str) -> Path:
+    return _REPO_ROOT / "data" / client / "extract" / rc / f"review-{rc}.xlsx"
+
+
+@release_app.command("import")
+def release_import_cmd(
+    rc: str = typer.Argument(..., help="Release-candidate id, e.g. rc.<client>.0001."),
+    xlsx: Optional[str] = typer.Argument(None, help="Reviewed workbook (default: the exported path)."),
+) -> None:
+    """Apply reviewer decisions from the reviewed workbook into staging (LLD-REL-02)."""
+    from agentkit.db.engine import connect
+    from agentkit.release.import_review import import_review
+
+    client = _client_of(rc)
+    path = Path(xlsx) if xlsx else _default_review_path(client, rc)
+    if not path.exists():
+        raise typer.BadParameter(f"workbook not found: {path}")
+    with connect() as conn:
+        with conn.begin():
+            counts = import_review(conn, rc, path, client=client)
+    typer.echo(f"Imported decisions from {path}; RC {rc} → imported.")
+    for table, buckets in counts.items():
+        total = sum(buckets.values())
+        if total:
+            summary = " ".join(f"{k}={v}" for k, v in buckets.items() if v)
+            typer.echo(f"  {table:16} {summary}")
+
+
+@release_app.command("check")
+def release_check_cmd(
+    rc: str = typer.Argument(..., help="Release-candidate id, e.g. rc.<client>.0001."),
+) -> None:
+    """Integrity-check the approved+edited set of an RC (LLD-REL-03)."""
+    from agentkit.db.engine import connect
+    from agentkit.release.check import check_rc, format_report
+
+    client = _client_of(rc)
+    with connect() as conn:
+        report = check_rc(conn, rc, client=client)
+    typer.echo(format_report(report))
+    if not report.ok:
+        raise typer.Exit(code=1)
+
+
+@release_app.command("diff")
+def release_diff_cmd(
+    rc: str = typer.Argument(..., help="Release-candidate id, e.g. rc.<client>.0001."),
+) -> None:
+    """Diff an RC's surviving set against the active release (LLD-REL-04)."""
+    from agentkit.db.engine import connect
+    from agentkit.release.diff import diff_rc, format_diff
+
+    with connect() as conn:
+        report = diff_rc(conn, rc)
+    typer.echo(format_diff(report))
+
+
+@release_app.command("promote")
+def release_promote_cmd(
+    rc: str = typer.Argument(..., help="Release-candidate id, e.g. rc.<client>.0001."),
+) -> None:
+    """Promote approved+edited rows into facts.* under a new release (LLD-REL-05)."""
+    from agentkit.db.engine import connect
+    from agentkit.release.promote import promote
+
+    client = _client_of(rc)
+    with connect() as conn:
+        with conn.begin():
+            result = promote(conn, rc, client=client)
+    typer.echo(f"Promoted {rc} → release {result['release_id']} (not yet active).")
+    for table, n in result["counts"].items():
+        typer.echo(f"  {table:16} {n}")
+    typer.echo("  embedding (LLD-RET) deferred to the next milestone.")
+    typer.echo(f"Activate with:  agentkit release activate {result['release_id']}")
+
+
+@release_app.command("activate")
+def release_activate_cmd(
+    release_id: str = typer.Argument(..., help="Release id, e.g. r2026.08.2."),
+) -> None:
+    """Make a release the single active one (LLD-REL-05)."""
+    from agentkit.db.engine import connect
+    from agentkit.release.promote import activate
+
+    with connect() as conn:
+        with conn.begin():
+            activate(conn, release_id)
+    typer.echo(f"Activated {release_id}.")
+
+
+@release_app.command("rollback")
+def release_rollback_cmd(
+    release_id: str = typer.Argument(..., help="Release id to activate instead (roll back to)."),
+) -> None:
+    """Roll back to a prior release by making it active (LLD-REL-05)."""
+    from agentkit.db.engine import connect
+    from agentkit.release.promote import activate
+
+    with connect() as conn:
+        with conn.begin():
+            activate(conn, release_id)
+    typer.echo(f"Rolled back to {release_id}.")
+
+
 @tools_app.command("match-capability")
 def match_capability_cmd(
     gas: str = typer.Option(..., "--gas", help="Gas to compress, e.g. hydrogen."),

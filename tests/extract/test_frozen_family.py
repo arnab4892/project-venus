@@ -71,6 +71,27 @@ def test_gases_become_capability_gas_rows() -> None:
     assert gas_rows[0]["cap_id"] == next(r for t, r in rows if t == "capability_row")["cap_id"]
 
 
+def test_gas_evidence_keeps_source_case_not_the_value() -> None:
+    # The model may lowercase the gas value ("hydrogen") while the gate-approved quote
+    # keeps the source case ("HYDROGEN"). build_rows must store the quote, not re-derive
+    # evidence from the (lowercased) value — that was the case-leak bug.
+    item = {
+        "rows": [
+            {
+                "family": {"value": "fam.process_recip", "evidence": "Process Gas Compressor"},
+                "capacity": {"value": "up to 20000 Nm3/hr", "evidence": "up to 20000 Nm3/hr"},
+                "gases": [{"value": "hydrogen", "evidence": "HYDROGEN"}],
+            }
+        ]
+    }
+    rows = schemas.build_rows(
+        _SEC, "capability_spec", item, family_ids=_FROZEN, confidence=0.9,
+    )
+    gas = next(r for t, r in rows if t == "capability_gas")
+    assert gas["gas"] == "hydrogen"                 # value stored verbatim
+    assert gas["evidence"]["gas"] == "HYDROGEN"     # gate-approved quote, not the value
+
+
 def test_mark_conflicts_links_same_family_capacity() -> None:
     web = schemas.build_rows(
         _Section("doc.pgc::s001", "doc.pgc", "§Process"),
