@@ -41,6 +41,19 @@ class Settings(BaseSettings):
     embed_base_url: str = "http://embed.internal:8001/v1"
     embed_model: str = "bge-m3"
 
+    # Embedding tokenizer + limits (LLD-RET-02). `embed_tokenizer` is a HF repo id
+    # (resolved from the local cache) or `embed_tokenizer_path` a local tokenizer.json
+    # / dir for air-gapped installs. `embed_limit` is the hard token ceiling: a chunk at
+    # or over it raises ChunkTooLargeError (never silent truncation). `embed_num_ctx` is
+    # the provider context window sent per request (≥ embed_limit + margin). `embed_batch`
+    # is the embedding batch size (LLD-RET-02: 64). bge-m3's max sequence length is 8192.
+    embed_tokenizer: str = "BAAI/bge-m3"
+    embed_tokenizer_path: str = ""
+    embed_dim: int = 1024
+    embed_limit: int = 8192
+    embed_num_ctx: int = 8448  # embed_limit + 256 margin
+    embed_batch: int = 64
+
     # Offline extractor LLM (CR-0002) — OpenAI-compatible, MAY be an external API
     # (public content only). Empty means "fall back to the runtime chat endpoint":
     # resolve via ``extractor_endpoint()`` rather than reading these fields raw.

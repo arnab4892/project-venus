@@ -3,8 +3,9 @@
 ``promote`` inserts the approved+edited staging rows into ``facts.*`` under a new
 ``rYYYY.MM.N`` release (not active yet), builds ``facts.product_family`` from the
 frozen ``families.yaml`` and ``facts.region_state`` from the curated seed, and
-asserts same-release FK closure. Embedding (LLD-RET) and the golden suite
-(LLD-EVAL) are deferred to the next milestone.
+asserts same-release FK closure. Embedding (LLD-RET) is triggered by the ``release
+promote`` CLI after this returns — best-effort in its own transaction so an
+unreachable embedder never rolls the promote back (run ``release embed`` separately).
 
 The **promote gate** (superseding the deliberately absent staging FK): refuse an
 RC with no ``staging.release_candidate`` ledger row, or whose status is not
