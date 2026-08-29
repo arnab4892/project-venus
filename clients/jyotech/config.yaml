@@ -1,5 +1,25 @@
 # Jyotech client registry entry.
-# Minimal placeholder for the skeleton; handoff routing, theme and seeds are
-# filled in by later milestones (and mirrored into ops.client / ops.prompt_version).
+# handoff routing, theme and seeds are filled in by later milestones (and mirrored
+# into ops.client / ops.prompt_version).
 client_id: jyotech
 domain: www.jyotech.com
+
+# Gas alias map (LLD-TOOL-01). Applied at query time in match_capability so a user
+# saying "hydrogen" matches the verbatim stored gas ("H2"); facts are never rewritten.
+# Both long names and symbols map to one canonical symbol so the messy stored forms
+# (H2 / hydrogen / Hydrogen, O2 / Oxygen / OXYGEN, …) all compare equal.
+gas_aliases:
+  hydrogen: H2
+  h2: H2
+  oxygen: O2
+  o2: O2
+  helium: He
+  he: He
+  nitrogen: N2
+  n2: N2
+  argon: Ar
+  ar: Ar
+  carbon dioxide: CO2
+  co2: CO2
+  carbon monoxide: CO
+  co: CO

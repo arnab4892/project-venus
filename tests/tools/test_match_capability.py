@@ -196,6 +196,50 @@ def test_unknown_capacity_unit_is_non_comparable_not_a_crash(seeded_conn):
     assert match["headroom"]["pressure"] == pytest.approx(1 - 350 / 850)
 
 
+def test_gas_alias_map_bridges_hydrogen_to_H2(seeded_conn):
+    """A row stored verbatim as 'H2' (like the live catalogue) is reached by a 'hydrogen'
+    query ONLY when the per-client gas alias map is applied; facts stay verbatim."""
+    conn = seeded_conn
+    conn.execute(text(
+        "INSERT INTO facts.capability_row (cap_id, release_id, family_id, comp_type, lubricated,"
+        " capacity_max, capacity_unit, discharge_p_max, pressure_unit, source_doc_id, source_locator) "
+        "SELECT 'cap.h2sym', 'r2026.08.1', 'fam.process_recip', 'recip', false, 20000, 'Nm3/hr',"
+        " 1000, 'barg', source_doc_id, source_locator "
+        "FROM facts.capability_row WHERE release_id='r2026.08.1' AND cap_id='cap.002'"
+    ))
+    conn.execute(text(
+        "INSERT INTO facts.capability_gas (cap_id, release_id, gas) VALUES ('cap.h2sym','r2026.08.1','H2')"
+    ))
+    args = dict(gas="hydrogen", capacity=3000, capacity_unit="Nm3/hr", discharge_p=350, lubricated=False)
+
+    plain = match_capability(conn, **args)  # no alias map
+    assert "cap.h2sym" not in _cap_ids(plain)
+
+    aliased = match_capability(conn, **args, gas_aliases={"hydrogen": "H2", "h2": "H2"})
+    assert "cap.h2sym" in _cap_ids(aliased)
+
+
+def test_null_lubricated_not_excluded_by_oil_free_filter(seeded_conn):
+    """null lubricated = 'unspecified / both offered': kept under an oil-free filter, flagged."""
+    conn = seeded_conn
+    conn.execute(text(
+        "INSERT INTO facts.capability_row (cap_id, release_id, family_id, comp_type, lubricated,"
+        " capacity_max, capacity_unit, discharge_p_max, pressure_unit, source_doc_id, source_locator) "
+        "SELECT 'cap.nolub', 'r2026.08.1', 'fam.process_recip', 'recip', NULL, 20000, 'Nm3/hr',"
+        " 1000, 'barg', source_doc_id, source_locator "
+        "FROM facts.capability_row WHERE release_id='r2026.08.1' AND cap_id='cap.002'"
+    ))
+    conn.execute(text(
+        "INSERT INTO facts.capability_gas (cap_id, release_id, gas) VALUES ('cap.nolub','r2026.08.1','hydrogen')"
+    ))
+    result = match_capability(
+        conn, gas="hydrogen", capacity=3000, capacity_unit="Nm3/hr", discharge_p=350, lubricated=False
+    )
+    match = next(m for m in result["matches"] if m["cap_id"] == "cap.nolub")
+    assert match["lubricated"] is None
+    assert match["lubricated_unspecified"] is True
+
+
 def test_one_active_release_enforced(seeded_conn):
     """The partial unique index on release(is_active) forbids a second active release."""
     from sqlalchemy.exc import IntegrityError

@@ -23,6 +23,8 @@ SCMD_PER_NM3HR = 24
 CAPACITY_UNITS = ("Nm3/hr", "SCMD")
 PRESSURE_UNIT = "barg"
 
+# The flow family — the ONLY capacity units with a documented interconversion
+# (SCMD ↔ Nm3/hr). match_capability may compare a query across these two.
 _CAPACITY_ALIASES = {
     "nm3/hr": "Nm3/hr",
     "nm3/h": "Nm3/hr",
@@ -30,21 +32,53 @@ _CAPACITY_ALIASES = {
     "nm3/hour": "Nm3/hr",
     "scmd": "SCMD",
 }
-_PRESSURE_ALIASES = {"bar": PRESSURE_UNIT, "barg": PRESSURE_UNIT}
+
+# Extended measure vocabulary (LLD-TOOL-01 design note). These units are *recognised* so a
+# row carrying one is comparable to a query in the SAME unit — but there is no invented
+# cross-unit factor, so any pair of different canonical units is non-comparable. Covers the
+# units the F&S / diving / process rows actually print (cfm, lpm, lumen, tons, TPD, kg/hr,
+# W, kg/cm2g, m3/hr, SCMH).
+_MEASURE_ALIASES = {
+    "m3/hr": "m3/hr", "m3/h": "m3/hr", "m3hr": "m3/hr",
+    "scmh": "SCMH",
+    "cfm": "cfm",
+    "lpm": "lpm", "l/min": "lpm",
+    "lumen": "lumen", "lumens": "lumen", "lm": "lumen",
+    "tons": "tons", "ton": "tons", "tonnes": "tons",
+    "tpd": "TPD",
+    "kg/hr": "kg/hr", "kg/h": "kg/hr", "kghr": "kg/hr",
+    "w": "W", "watt": "W", "watts": "W",
+}
+
+_PRESSURE_ALIASES = {
+    "bar": PRESSURE_UNIT, "barg": PRESSURE_UNIT,
+    "psi": "psi", "psig": "psi",
+    "kg/cm2g": "kg/cm2g", "kg/cm2": "kg/cm2g",
+}
 
 
 def canonical_capacity_unit(unit: str) -> str:
-    """``Nm³/hr | Nm3/hr | NM3/HR → Nm3/hr``; ``SCMD`` kept. Raises on unknown units."""
+    """Canonicalise a capacity/measure unit. Raises ``ValueError`` on unknown units.
+
+    ``Nm³/hr | Nm3/hr | NM3/HR → Nm3/hr``; ``SCMD`` kept; the extended vocabulary
+    (``cfm``, ``lpm``, ``lumen``, ``tons``, ``TPD``, ``kg/hr``, ``W``, ``m3/hr``, ``SCMH`` …)
+    canonicalises to itself — comparable only within its own unit (see :func:`convert_capacity`).
+    """
     key = re.sub(r"\s+", "", unit.replace("³", "3")).lower()
-    try:
+    if key in _CAPACITY_ALIASES:
         return _CAPACITY_ALIASES[key]
-    except KeyError:
-        raise ValueError(f"Unknown capacity unit: {unit!r}") from None
+    if key in _MEASURE_ALIASES:
+        return _MEASURE_ALIASES[key]
+    raise ValueError(f"Unknown capacity unit: {unit!r}")
 
 
 def canonical_pressure_unit(unit: str) -> str:
-    """``bar | barg → barg``. Raises on unknown units."""
-    key = unit.strip().lower()
+    """``bar | barg → barg``; ``psi``/``kg/cm2g`` canonicalise to themselves. Raises on unknown.
+
+    Non-``barg`` pressure units are recognised but never converted to ``barg`` (no invented
+    factor), so match_capability treats them as non-comparable rather than crashing.
+    """
+    key = re.sub(r"\s+", "", unit.replace("²", "2")).lower()
     try:
         return _PRESSURE_ALIASES[key]
     except KeyError:
@@ -52,9 +86,12 @@ def canonical_pressure_unit(unit: str) -> str:
 
 
 def convert_capacity(value: float, from_unit: str, to_unit: str) -> float:
-    """Convert a flow ``value`` between canonical capacity units.
+    """Convert a flow ``value`` between capacity units.
 
-    Nm3/hr → SCMD multiplies by :data:`SCMD_PER_NM3HR`; SCMD → Nm3/hr divides.
+    Only the documented flow-family pair converts: Nm3/hr → SCMD multiplies by
+    :data:`SCMD_PER_NM3HR`, SCMD → Nm3/hr divides. Identical canonical units pass through.
+    Any other pair (e.g. ``cfm`` ↔ ``Nm3/hr``) raises — no cross-unit factor is invented, so
+    the caller treats it as non-comparable.
     """
     src = canonical_capacity_unit(from_unit)
     dst = canonical_capacity_unit(to_unit)
@@ -64,7 +101,7 @@ def convert_capacity(value: float, from_unit: str, to_unit: str) -> float:
         return float(value) * SCMD_PER_NM3HR
     if src == "SCMD" and dst == "Nm3/hr":
         return float(value) / SCMD_PER_NM3HR
-    raise ValueError(f"No conversion from {src} to {dst}")  # pragma: no cover
+    raise ValueError(f"No conversion from {src} to {dst}")
 
 
 # ---------------------------------------------------------------------------
