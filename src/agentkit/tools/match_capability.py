@@ -6,7 +6,12 @@ headroom, plus a ``near_edge`` flag when any published limit is within 10%.
 
 Reads only the active-release views (LLD-DB-02) and never filters ``release_id``.
 Unit handling (Nm³/hr ↔ SCMD, barg) is delegated to
-:mod:`agentkit.extract.normalise` (LLD-EXT-09).
+:mod:`agentkit.extract.normalise` (LLD-EXT-09). Three behaviours from the LLD-TOOL-01
+design note: a per-client **gas alias map** (``hydrogen`` → ``H2`` …) applied at query
+time (facts stay verbatim); a null ``lubricated`` means "unspecified / both offered" —
+**not** excluded by an oil-free filter, returned with a caveat; a row whose unit is null
+or outside the canonical vocabulary is non-comparable on that dimension (headroom ``None``),
+never guessed.
 """
 
 from __future__ import annotations
@@ -29,11 +34,30 @@ SELECT cr.cap_id, cr.family_id, cr.lubricated,
 FROM facts.active_capability_row cr
 JOIN facts.active_product_family pf ON pf.family_id = cr.family_id
 JOIN facts.active_capability_gas cg ON cg.cap_id = cr.cap_id
-WHERE lower(cg.gas) = lower(:gas)
+WHERE cg.gas = ANY(:gas_terms)
 {lubricated_clause}
 {standard_clause}
 ORDER BY cr.cap_id
 """
+
+
+def _canon_gas(term: str, aliases: dict[str, str]) -> str:
+    """Canonicalise a gas name for comparison: alias map first, else case-folded.
+
+    Facts stay verbatim; this only normalises for the lookup, so a user's ``hydrogen``
+    matches a stored ``H2`` (and the messy ``hydrogen``/``Hydrogen`` surface forms too).
+    """
+    key = term.strip().lower()
+    return aliases.get(key, key)
+
+
+def _gas_terms(conn: Connection, gas: str, aliases: dict[str, str]) -> list[str]:
+    """Stored gas strings in the active release equivalent to the query gas."""
+    canon_q = _canon_gas(gas, aliases)
+    stored = conn.execute(
+        text("SELECT DISTINCT gas FROM facts.active_capability_gas")
+    ).scalars().all()
+    return [g for g in stored if _canon_gas(g, aliases) == canon_q]
 
 
 def _as_float(value) -> float | None:
@@ -74,22 +98,27 @@ def match_capability(
     discharge_p: float,
     lubricated: bool | None = None,
     standard: str | None = None,
+    gas_aliases: dict[str, str] | None = None,
 ) -> dict:
     """Return ``{"matches": [...], "near_edge": bool}`` for a gas/flow/pressure duty.
 
-    Each match is ``{"cap_id", "family_id", "headroom": {"capacity", "pressure"}}``
-    where headroom is ``1 − value/limit`` per dimension (``None`` when the limit is
-    unpublished). ``near_edge`` is true when any matched cap has a value within 10%
-    of a published limit. Pressure is treated as ``barg``; capacity is converted to
-    each cap's stored unit before comparison.
+    Each match is ``{"cap_id", "family_id", "lubricated", "headroom": {"capacity",
+    "pressure"}}`` where headroom is ``1 − value/limit`` per dimension (``None`` when the
+    limit is unpublished or the row's unit is non-comparable). A row with a null
+    ``lubricated`` is kept even under an oil-free (``lubricated=False``) filter and flagged
+    ``lubricated_unspecified: True``. ``near_edge`` is true when any matched cap has a value
+    within 10% of a published limit. ``gas_aliases`` (per-client) normalises the query gas.
     """
+    aliases = {str(k).strip().lower(): str(v) for k, v in (gas_aliases or {}).items()}
     canonical_pressure_unit("barg")  # validate the fixed pressure basis
     query_cap_unit = canonical_capacity_unit(capacity_unit)
 
-    params: dict[str, object] = {"gas": gas}
+    params: dict[str, object] = {"gas_terms": _gas_terms(conn, gas, aliases)}
     lubricated_clause = ""
     if lubricated is not None:
-        lubricated_clause = "AND cr.lubricated = :lubricated"
+        # A null lubricated = "unspecified / both offered": include it even under an
+        # oil-free filter (flagged per match), rather than excluding it.
+        lubricated_clause = "AND (cr.lubricated = :lubricated OR cr.lubricated IS NULL)"
         params["lubricated"] = lubricated
     standard_clause = ""
     if standard is not None:
@@ -102,8 +131,12 @@ def match_capability(
     rows = conn.execute(text(sql), params).mappings().all()
 
     matches: list[dict] = []
+    seen: set[str] = set()
     near_edge = False
     for row in rows:
+        if row["cap_id"] in seen:  # a cap serving several equivalent gas forms
+            continue
+        seen.add(row["cap_id"])
         cap_max = _as_float(row["capacity_max"])
         cap_min = _as_float(row["capacity_min"])
         p_max = _as_float(row["discharge_p_max"])
@@ -135,15 +168,17 @@ def match_capability(
         ):
             near_edge = True
 
-        matches.append(
-            {
-                "cap_id": row["cap_id"],
-                "family_id": row["family_id"],
-                "headroom": {
-                    "capacity": None if cap_ratio is None else 1 - cap_ratio,
-                    "pressure": None if p_ratio is None else 1 - p_ratio,
-                },
-            }
-        )
+        match = {
+            "cap_id": row["cap_id"],
+            "family_id": row["family_id"],
+            "lubricated": row["lubricated"],
+            "headroom": {
+                "capacity": None if cap_ratio is None else 1 - cap_ratio,
+                "pressure": None if p_ratio is None else 1 - p_ratio,
+            },
+        }
+        if row["lubricated"] is None:
+            match["lubricated_unspecified"] = True
+        matches.append(match)
 
     return {"matches": matches, "near_edge": near_edge}

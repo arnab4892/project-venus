@@ -23,12 +23,16 @@ tools_app = typer.Typer(help="Run a runtime tool from the shell.", no_args_is_he
 ingest_app = typer.Typer(help="Crawl + convert client sources (stage 1).", no_args_is_help=True)
 extract_app = typer.Typer(help="Extract facts to staging (LLM).", no_args_is_help=True)
 release_app = typer.Typer(help="Release candidates + review export.", no_args_is_help=True)
+chunk_app = typer.Typer(help="Chunk the active release for embedding.", no_args_is_help=True)
+eval_app = typer.Typer(help="Golden-suite evaluation.", no_args_is_help=True)
 app.add_typer(db_app, name="db")
 app.add_typer(seed_app, name="seed")
 app.add_typer(tools_app, name="tools")
 app.add_typer(ingest_app, name="ingest")
 app.add_typer(extract_app, name="extract")
 app.add_typer(release_app, name="release")
+app.add_typer(chunk_app, name="chunk")
+app.add_typer(eval_app, name="eval")
 
 # Repo root = two levels up from this file (src/agentkit/cli.py -> src -> root).
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -316,25 +320,140 @@ def release_promote_cmd(
     with connect() as conn:
         with conn.begin():
             result = promote(conn, rc, client=client)
-    typer.echo(f"Promoted {rc} → release {result['release_id']} (not yet active).")
+    release_id = result["release_id"]
+    typer.echo(f"Promoted {rc} → release {release_id} (not yet active).")
     for table, n in result["counts"].items():
         typer.echo(f"  {table:16} {n}")
-    typer.echo("  embedding (LLD-RET) deferred to the next milestone.")
-    typer.echo(f"Activate with:  agentkit release activate {result['release_id']}")
+
+    # Trigger embedding (LLD-RET / LLD-REL-05). Best-effort in its own transaction: a
+    # promote must not be lost because the self-hosted embedder is unreachable — the
+    # facts are already committed and `agentkit release embed` can run later.
+    from agentkit.retrieval.embed import release_embed
+
+    try:
+        with connect() as conn:
+            with conn.begin():
+                emb = release_embed(conn, client, release_id)
+        typer.echo(f"  embedded {emb['embedded']}/{emb['chunks']} chunks → {emb['table']}")
+    except Exception as exc:  # noqa: BLE001 - report, never abort the promote
+        typer.echo(f"  embedding deferred: {type(exc).__name__}: {exc}")
+        typer.echo(f"  run when the embedder is reachable:  agentkit release embed {release_id}")
+    typer.echo(f"Activate with:  agentkit release activate {release_id}")
+
+
+@release_app.command("embed")
+def release_embed_cmd(
+    release_id: str = typer.Argument(..., help="Release id, e.g. r2026.08.2."),
+    client: Optional[str] = typer.Option(
+        None, "--client", help="Client id (default: the single clients/* dir)."
+    ),
+) -> None:
+    """Chunk + embed a release into facts.chunk and vec.chunk_embedding_<release>.
+
+    Applies the approved chunking.yaml (LLD-RET-04), writes the chunk text/FTS to
+    facts.chunk, and embeds every chunk with the self-hosted model into the per-release
+    HNSW vector table (LLD-RET-02 / LLD-DB-03). Idempotent.
+    """
+    from agentkit.db.engine import connect
+    from agentkit.ingest.sources import autodetect_client
+    from agentkit.retrieval.embed import release_embed
+
+    client = client or autodetect_client()
+    with connect() as conn:
+        with conn.begin():
+            result = release_embed(conn, client, release_id)
+    typer.echo(
+        f"Embedded {result['embedded']}/{result['chunks']} chunks "
+        f"→ {result['table']} ({result['dim']}-d)"
+    )
+
+
+@eval_app.command("run")
+def eval_run_cmd(
+    client: str = typer.Argument(..., help="Client id, e.g. jyotech."),
+) -> None:
+    """Run the golden suite (fact + retrieval layers) against the active release (LLD-EVAL-02).
+
+    The e2e layer is reported 'pending' (needs agents, milestone 5). Exits non-zero if any
+    fact or retrieval check fails.
+    """
+    from agentkit.db.engine import connect
+    from agentkit.eval.runner import format_report, run_eval
+
+    with connect() as conn:
+        report = run_eval(conn, client)
+    typer.echo(format_report(report))
+    if not report.ok:
+        raise typer.Exit(code=1)
+
+
+@chunk_app.command("run")
+def chunk_run_cmd(
+    client: str = typer.Argument(..., help="Client id, e.g. jyotech."),
+) -> None:
+    """Seed/refresh chunking.yaml + a disposition report for the active release (Gate 1).
+
+    Writes ``clients/<client>/seeds/chunking.yaml`` and prints the per-document
+    disposition, chunk counts, dedup list and largest-chunk stats, then STOPS. Review /
+    edit the yaml, then run ``agentkit release embed <release>``. Re-running applies the
+    approved yaml.
+    """
+    from agentkit.db.engine import connect
+    from agentkit.retrieval.chunk import (
+        chunk_corpus,
+        format_report,
+        resolve_active_release,
+        write_dispositions_config,
+    )
+    from agentkit.retrieval.tokenizer import bge_m3_counter
+
+    settings = get_settings()
+    counter = bge_m3_counter(settings)
+    with connect() as conn:
+        release_id = resolve_active_release(conn)
+        _chunks, report = chunk_corpus(
+            conn, client, release_id, count_tokens=counter, embed_limit=settings.embed_limit
+        )
+    path = write_dispositions_config(client, report.dispositions)
+    typer.echo(format_report(report, embed_limit=settings.embed_limit))
+    typer.echo("")
+    typer.echo(f"Wrote {path}")
+    typer.echo("── GATE 1 ── review dispositions / edit chunking.yaml, then embed:")
+    typer.echo(f"  agentkit release embed {release_id}")
 
 
 @release_app.command("activate")
 def release_activate_cmd(
     release_id: str = typer.Argument(..., help="Release id, e.g. r2026.08.2."),
 ) -> None:
-    """Make a release the single active one (LLD-REL-05)."""
+    """Make a release the single active one, gated by the golden suite (LLD-REL-05/EVAL-03).
+
+    Activation and the golden run share one transaction: the release is flipped active, the
+    fact + retrieval layers run against it, and a fact/retrieval failure rolls the activation
+    back (LLD-EVAL-03). The e2e layer is pending agents (milestone 5), so it never blocks; an
+    unreachable embedder degrades the retrieval layer to 'not evaluated', never a failure.
+    """
     from agentkit.db.engine import connect
+    from agentkit.eval.runner import format_report, run_eval
+    from agentkit.ingest.sources import autodetect_client
     from agentkit.release.promote import activate
 
+    client = autodetect_client()
     with connect() as conn:
-        with conn.begin():
+        trans = conn.begin()
+        try:
             activate(conn, release_id)
-    typer.echo(f"Activated {release_id}.")
+            report = run_eval(conn, client)
+        except Exception:
+            trans.rollback()
+            raise
+        if not report.ok:
+            trans.rollback()
+            typer.echo(format_report(report))
+            typer.echo(f"\nGolden suite FAILED — {release_id} NOT activated (LLD-EVAL-03).")
+            raise typer.Exit(code=1)
+        trans.commit()
+    typer.echo(f"Activated {release_id}. Golden suite passed (fact + retrieval; e2e pending).")
 
 
 @release_app.command("rollback")
@@ -361,11 +480,15 @@ def match_capability_cmd(
         None, "--oil-free/--lubricated", help="Filter to oil-free / lubricated rows."
     ),
     standard: Optional[str] = typer.Option(None, "--standard", help="Required standard."),
+    client: Optional[str] = typer.Option(None, "--client", help="Client id (for gas aliases)."),
 ) -> None:
     """Match a gas duty against the published capability envelope (LLD-TOOL-01)."""
+    from agentkit.client_config import gas_alias_map
     from agentkit.db.engine import connect
+    from agentkit.ingest.sources import autodetect_client
     from agentkit.tools.match_capability import match_capability
 
+    client = client or autodetect_client()
     lubricated = None if oil_free is None else (not oil_free)
     with connect() as conn:
         result = match_capability(
@@ -376,8 +499,82 @@ def match_capability_cmd(
             discharge_p=discharge_p,
             lubricated=lubricated,
             standard=standard,
+            gas_aliases=gas_alias_map(client),
         )
     typer.echo(json.dumps(result, indent=2))
+
+
+@tools_app.command("search-documents")
+def search_documents_cmd(
+    query: str = typer.Argument(..., help="Free-text search query."),
+    division: Optional[str] = typer.Option(None, "--division", help="Filter: industrial/fire_rescue/diving."),
+    family: Optional[list[str]] = typer.Option(None, "--family", help="Filter: family id (repeatable)."),
+    k: int = typer.Option(5, "--k", help="Number of chunks to return."),
+) -> None:
+    """Hybrid (vector ∪ FTS) chunk search over the active release (LLD-TOOL-04)."""
+    from agentkit.db.engine import connect
+    from agentkit.tools.search_documents import search_documents
+
+    with connect() as conn:
+        result = search_documents(
+            conn, query, division=division, family_ids=list(family) if family else None, k=k
+        )
+    typer.echo(json.dumps(result, indent=2))
+
+
+@tools_app.command("list-products")
+def list_products_cmd(
+    division: str = typer.Argument(..., help="Division: industrial/fire_rescue/diving."),
+    category: Optional[str] = typer.Option(None, "--category", help="Optional category filter."),
+) -> None:
+    """List families + products in a division (LLD-TOOL-02)."""
+    from agentkit.db.engine import connect
+    from agentkit.tools.list_products import list_products
+
+    with connect() as conn:
+        result = list_products(conn, division, category=category)
+    typer.echo(json.dumps(result, indent=2))
+
+
+@tools_app.command("get-product")
+def get_product_cmd(
+    model_or_family: str = typer.Argument(..., help="Model number, family id or family name."),
+) -> None:
+    """Look up a product by model or family, with alias normalisation (LLD-TOOL-03)."""
+    from agentkit.db.engine import connect
+    from agentkit.tools.get_product import get_product
+
+    with connect() as conn:
+        result = get_product(conn, model_or_family)
+    typer.echo(json.dumps(result, indent=2))
+
+
+@tools_app.command("get-company-fact")
+def get_company_fact_cmd(
+    kind: str = typer.Argument(..., help="Fact kind, e.g. certification, founded, coverage."),
+) -> None:
+    """Return company facts of a kind (LLD-TOOL-05)."""
+    from agentkit.db.engine import connect
+    from agentkit.tools.get_company_fact import get_company_fact
+
+    with connect() as conn:
+        result = get_company_fact(conn, kind)
+    typer.echo(json.dumps(result, indent=2))
+
+
+@tools_app.command("get-office")
+def get_office_cmd(
+    city: Optional[str] = typer.Option(None, "--city", help="City name."),
+    state: Optional[str] = typer.Option(None, "--state", help="State name."),
+    region: Optional[str] = typer.Option(None, "--region", help="Region: North/South/East/West/Intl."),
+) -> None:
+    """Resolve an office by city/state/region, head-office fallback (LLD-TOOL-06)."""
+    from agentkit.db.engine import connect
+    from agentkit.tools.get_office import get_office
+
+    with connect() as conn:
+        result = get_office(conn, city=city, state=state, region=region)
+    typer.echo(json.dumps(result, indent=2, default=str))
 
 
 if __name__ == "__main__":

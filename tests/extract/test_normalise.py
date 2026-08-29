@@ -62,3 +62,42 @@ def test_single_value_is_a_point() -> None:
 def test_dash_range() -> None:
     r = parse_capacity("10000–100000 SCMD")
     assert (r.min, r.max) == (10000, 100000)
+
+
+# --- extended unit vocabulary (LLD-TOOL-01 design note) ---------------------
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("cfm", "cfm"), ("lpm", "lpm"), ("Lumen", "lumen"), ("tons", "tons"),
+        ("TPD", "TPD"), ("Kg/hr", "kg/hr"), ("W", "W"), ("m3/hr", "m3/hr"), ("SCMH", "SCMH"),
+    ],
+)
+def test_extended_capacity_vocabulary_is_recognised(raw: str, expected: str) -> None:
+    assert canonical_capacity_unit(raw) == expected
+
+
+def test_extended_units_comparable_within_family_only() -> None:
+    # same unit → comparable (identity conversion)
+    assert convert_capacity(500, "kg/hr", "kg/hr") == 500
+    assert convert_capacity(100, "cfm", "cfm") == 100
+    # different units → no invented factor, non-comparable (raises)
+    with pytest.raises(ValueError):
+        convert_capacity(100, "cfm", "Nm3/hr")
+    with pytest.raises(ValueError):
+        convert_capacity(100, "kg/hr", "SCMD")
+
+
+def test_unknown_unit_still_raises() -> None:
+    with pytest.raises(ValueError):
+        canonical_capacity_unit("widgets")
+    with pytest.raises(ValueError):
+        canonical_pressure_unit("furlongs")
+
+
+def test_non_barg_pressure_recognised_but_not_converted() -> None:
+    # psi / kg/cm2g canonicalise to themselves — never silently treated as barg
+    assert canonical_pressure_unit("psi") == "psi"
+    assert canonical_pressure_unit("kg/cm2g") == "kg/cm2g"
+    assert canonical_pressure_unit("psi") != canonical_pressure_unit("barg")

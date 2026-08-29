@@ -1,0 +1,485 @@
+# Golden question suite (LLD-EVAL-01). 46 questions (the initial 40 + a 6-question Gate-2
+# extension, recorded in docs/changes/milestone-4-notes.md): 18 capability, 12 product,
+# 8 company/docs, 6 after-sales, 2 out-of-scope. Each carries the LLD-EVAL-01 fields
+# (question, expected_answer_contains, expected_source_ids, expected_outcome) plus optional
+# `fact` / `retrieval` execution blocks the runner uses to score the fact and retrieval
+# layers against the LIVE active release. The e2e (agent-answer) layer is reported "pending"
+# until the agents land (milestone 5).
+#
+# expected_outcome ∈ {answer, asked_slot, handoff, refuse, out_of_scope}.
+# fact:      {tool, args, expect_ids}   — ids that MUST appear in the tool result
+# retrieval: {query?, division?, family_ids?, expect_doc|expect_locator|expect_chunk_ids}
+
+questions:
+
+  # ---- capability (15) ---------------------------------------------------
+  - id: cap-hydrogen-process
+    question: "We need to compress hydrogen, about 3000 Nm3/hr from 20 to 350 bar. Oil-free is mandatory."
+    expected_answer_contains: ["process gas", "reciprocating"]
+    expected_source_ids: ["cap.doc_jyotech_catalog_process_s005.0", "fam.process_recip"]
+    expected_outcome: answer
+    fact:
+      tool: match_capability
+      args: {gas: hydrogen, capacity: 3000, capacity_unit: "Nm3/hr", discharge_p: 350, lubricated: false}
+      expect_ids: ["fam.process_recip"]
+    retrieval:
+      query: "hydrogen process gas compressor API-618"
+      expect_doc: doc.jyotech_catalog_process
+
+  - id: cap-hydrogen-small-kghr
+    question: "Do you have a small hydrogen compressor around 30 kg/hr up to 800 bar?"
+    expected_answer_contains: ["hydrogen"]
+    expected_source_ids: ["fam.hydrogen_compressor"]
+    expected_outcome: answer
+    fact:
+      tool: match_capability
+      args: {gas: hydrogen, capacity: 30, capacity_unit: "kg/hr", discharge_p: 800, lubricated: false}
+      expect_ids: ["fam.hydrogen_compressor"]
+
+  - id: cap-hydrogen-fuelling
+    question: "Do you offer a hydrogen fuelling station up to 350 bar?"
+    expected_answer_contains: ["hydrogen", "fuelling"]
+    expected_source_ids: ["fam.hydrogen_fuelling_system"]
+    expected_outcome: answer
+    fact:
+      tool: match_capability
+      args: {gas: hydrogen, capacity: 100, capacity_unit: "Nm3/hr", discharge_p: 350}
+      expect_ids: ["fam.hydrogen_fuelling_system"]
+    retrieval:
+      query: "hydrogen fuelling station"
+      expect_doc: doc.jyotech_catalog_process
+
+  - id: cap-oxygen-recip
+    question: "Need an oxygen compressor for about 5000 Nm3/hr at 40 bar."
+    expected_answer_contains: ["oxygen"]
+    expected_source_ids: ["fam.oxygen_recip"]
+    expected_outcome: answer
+    fact:
+      tool: match_capability
+      args: {gas: oxygen, capacity: 5000, capacity_unit: "Nm3/hr", discharge_p: 40}
+      expect_ids: ["fam.oxygen_recip"]
+
+  - id: cap-oxygen-over-pressure
+    question: "Can you supply an oxygen compressor at 350 bar discharge?"
+    expected_answer_contains: ["engineers"]
+    expected_source_ids: []
+    expected_outcome: handoff
+    fact:
+      tool: match_capability
+      args: {gas: oxygen, capacity: 5000, capacity_unit: "Nm3/hr", discharge_p: 350}
+      expect_ids: []
+
+  - id: cap-natural-gas
+    question: "Natural gas compressor for roughly 20000 SCMD at 100 bar?"
+    expected_answer_contains: ["natural gas"]
+    expected_source_ids: ["fam.natural_gas_recip"]
+    expected_outcome: answer
+    fact:
+      tool: match_capability
+      args: {gas: "natural gas", capacity: 20000, capacity_unit: "SCMD", discharge_p: 100}
+      expect_ids: ["fam.natural_gas_recip"]
+
+  - id: cap-cng-booster
+    question: "CNG booster around 1500 SCMH at 250 bar?"
+    expected_answer_contains: ["CNG"]
+    expected_source_ids: ["fam.hydraulic_cng_booster"]
+    expected_outcome: answer
+    fact:
+      tool: match_capability
+      args: {gas: "CNG", capacity: 1500, capacity_unit: "SCMH", discharge_p: 250}
+      expect_ids: ["fam.hydraulic_cng_booster"]
+
+  - id: cap-diaphragm-helium
+    question: "Diaphragm compressor for helium, ~300 Nm3/hr up to 800 bar?"
+    expected_answer_contains: ["diaphragm"]
+    expected_source_ids: ["fam.diaphragm_compressor"]
+    expected_outcome: answer
+    fact:
+      tool: match_capability
+      args: {gas: helium, capacity: 300, capacity_unit: "Nm3/hr", discharge_p: 800}
+      expect_ids: ["fam.diaphragm_compressor"]
+
+  - id: cap-argon-diaphragm
+    question: "Do you handle argon on a diaphragm machine at high pressure?"
+    expected_answer_contains: ["argon"]
+    expected_source_ids: ["fam.diaphragm_compressor"]
+    expected_outcome: answer
+    fact:
+      tool: match_capability
+      args: {gas: argon, capacity: 200, capacity_unit: "Nm3/hr", discharge_p: 700}
+      expect_ids: ["fam.diaphragm_compressor"]
+
+  - id: cap-nitrogen-hp
+    question: "High-pressure nitrogen compressor around 80 m3/hr at 400 bar?"
+    expected_answer_contains: ["nitrogen"]
+    expected_source_ids: ["fam.hp_air_gas_compressor"]
+    expected_outcome: answer
+    fact:
+      tool: match_capability
+      args: {gas: nitrogen, capacity: 80, capacity_unit: "m3/hr", discharge_p: 400}
+      expect_ids: ["fam.hp_air_gas_compressor"]
+
+  - id: cap-air-booster
+    question: "Air booster to about 400 bar, ~500 m3/hr?"
+    expected_answer_contains: ["booster"]
+    expected_source_ids: ["fam.hp_air_gas_booster"]
+    expected_outcome: answer
+    fact:
+      tool: match_capability
+      args: {gas: "Air", capacity: 500, capacity_unit: "m3/hr", discharge_p: 400}
+      expect_ids: ["fam.hp_air_gas_booster"]
+
+  - id: cap-air-separation
+    question: "Do you build air separation plants for nitrogen?"
+    expected_answer_contains: ["air separation"]
+    expected_source_ids: ["fam.air_separation_plant"]
+    expected_outcome: answer
+    fact:
+      tool: match_capability
+      args: {gas: nitrogen, capacity: 1000, capacity_unit: "TPD", discharge_p: 0}
+      expect_ids: ["fam.air_separation_plant"]
+
+  - id: cap-biogas
+    question: "Bio gas compressor around 800 Nm3/hr at 250 bar?"
+    expected_answer_contains: ["bio gas"]
+    expected_source_ids: ["fam.biogas_hp_compressor"]
+    expected_outcome: answer
+    fact:
+      tool: match_capability
+      args: {gas: "Bio Gas", capacity: 800, capacity_unit: "Nm3/hr", discharge_p: 250}
+      expect_ids: ["fam.biogas_hp_compressor"]
+
+  - id: cap-hydrogen-near-edge
+    question: "Hydrogen at 24000 Nm3/hr, 900 bar — is that within your published range?"
+    expected_answer_contains: ["engineers"]
+    expected_source_ids: ["fam.process_recip"]
+    expected_outcome: answer
+    fact:
+      tool: match_capability
+      args: {gas: hydrogen, capacity: 24000, capacity_unit: "Nm3/hr", discharge_p: 900, lubricated: false}
+      expect_ids: ["fam.process_recip"]
+
+  - id: cap-wrong-gas-out-of-range
+    question: "Compress chlorine to 500 bar?"
+    expected_answer_contains: ["engineers"]
+    expected_source_ids: []
+    expected_outcome: handoff
+    fact:
+      tool: match_capability
+      args: {gas: chlorine, capacity: 100, capacity_unit: "Nm3/hr", discharge_p: 500}
+      expect_ids: []
+
+  - id: cap-process-max-capacity
+    # Permanent guard on the 20000-vs-25000 adjudication (milestone-3b review): the published
+    # maximum is 25000 Nm3/hr via cap.doc_jyotech_catalog_process_s005.0. If a future
+    # re-extraction resurrects the website's rejected 20000 figure, this question must fail.
+    question: "What is the maximum capacity of your process gas compressors?"
+    expected_answer_contains: ["25000"]
+    expected_source_ids: ["cap.doc_jyotech_catalog_process_s005.0"]
+    expected_outcome: answer
+    fact:
+      tool: match_capability
+      args: {gas: hydrogen, capacity: 25000, capacity_unit: "Nm3/hr", discharge_p: 1000, lubricated: false}
+      expect_ids: ["cap.doc_jyotech_catalog_process_s005.0"]
+
+  - id: cap-natgas-unit-conversion
+    # Exercises the documented 1 Nm3/hr = 24 SCMD conversion: 2000 Nm3/hr = 48000 SCMD, which
+    # falls inside the family's published SCMD range [10000, 100000] (LLD-EXT-09).
+    question: "Natural gas, about 2000 Nm3/hr at 100 bar?"
+    expected_answer_contains: ["natural gas"]
+    expected_source_ids: ["fam.natural_gas_recip"]
+    expected_outcome: answer
+    fact:
+      tool: match_capability
+      args: {gas: "natural gas", capacity: 2000, capacity_unit: "Nm3/hr", discharge_p: 100}
+      expect_ids: ["fam.natural_gas_recip"]
+
+  - id: e2e-hinglish-hydrogen
+    # e2e-only (PRD-F-012 Hinglish): NO fact/retrieval blocks — scored only at the e2e layer,
+    # reported "pending agents" until the agents land (milestone 5).
+    question: "Hydrogen compressor chahiye, 3000 Nm3/hr, oil-free"
+    expected_answer_contains: ["process gas"]
+    expected_source_ids: ["fam.process_recip"]
+    expected_outcome: answer
+
+  # ---- product (10) ------------------------------------------------------
+  - id: prod-ccdu
+    question: "Tell me about the CCDU compressor."
+    expected_answer_contains: ["CCDU"]
+    expected_source_ids: ["fam.ccdu_3in1"]
+    expected_outcome: answer
+    fact:
+      tool: get_product
+      args: {model_or_family: "CCDU"}
+      expect_ids: ["fam.ccdu_3in1"]
+
+  - id: prod-eolo
+    question: "Do you have the EOLO 330 breathing air unit?"
+    expected_answer_contains: ["EOLO"]
+    expected_source_ids: ["fam.eolo330_lpba"]
+    expected_outcome: answer
+    fact:
+      tool: get_product
+      args: {model_or_family: "EOLO 330"}
+      expect_ids: ["fam.eolo330_lpba"]
+
+  - id: prod-eolo-alias
+    question: "Is the EOLO330 available? (no space)"
+    expected_answer_contains: ["EOLO"]
+    expected_source_ids: ["fam.eolo330_lpba"]
+    expected_outcome: answer
+    fact:
+      tool: get_product
+      args: {model_or_family: "EOLO330"}
+      expect_ids: ["fam.eolo330_lpba"]
+
+  - id: prod-diablo
+    question: "What is the Diablo Piz?"
+    expected_answer_contains: ["escape"]
+    expected_source_ids: ["fam.eebd_escape"]
+    expected_outcome: answer
+    fact:
+      tool: get_product
+      args: {model_or_family: "Diablo Piz"}
+      expect_ids: ["fam.eebd_escape"]
+
+  - id: prod-cmonitor
+    question: "Do you supply a C-Monitor for diving?"
+    expected_answer_contains: ["monitor"]
+    expected_source_ids: ["fam.diving_accessories"]
+    expected_outcome: answer
+    fact:
+      tool: get_product
+      args: {model_or_family: "C-Monitor"}
+      expect_ids: ["fam.diving_accessories"]
+
+  - id: prod-combi-tool
+    question: "Battery powered combi-tool for rescue?"
+    expected_answer_contains: ["combi"]
+    expected_source_ids: ["fam.battery_rescue_tools"]
+    expected_outcome: answer
+    fact:
+      tool: get_product
+      args: {model_or_family: "BATTERY POWERED COMBI-TOOL"}
+      expect_ids: ["fam.battery_rescue_tools"]
+
+  - id: prod-list-industrial
+    question: "What industrial compressors do you make?"
+    expected_answer_contains: ["compressor"]
+    expected_source_ids: ["fam.process_recip"]
+    expected_outcome: answer
+    fact:
+      tool: list_products
+      args: {division: industrial}
+      expect_ids: ["fam.process_recip"]
+
+  - id: prod-list-fire
+    question: "What fire and rescue equipment do you offer?"
+    expected_answer_contains: ["rescue"]
+    expected_source_ids: ["fam.hp_lifting_bags"]
+    expected_outcome: answer
+    fact:
+      tool: list_products
+      args: {division: fire_rescue}
+      expect_ids: ["fam.hp_lifting_bags"]
+
+  - id: prod-list-diving
+    question: "Show me your diving equipment."
+    expected_answer_contains: ["diving"]
+    expected_source_ids: ["fam.diving_accessories"]
+    expected_outcome: answer
+    fact:
+      tool: list_products
+      args: {division: diving}
+      expect_ids: ["fam.diving_accessories"]
+
+  - id: prod-diving-accessories-family
+    question: "What diving accessories are in your range?"
+    expected_answer_contains: ["diving"]
+    expected_source_ids: ["fam.diving_accessories"]
+    expected_outcome: answer
+    fact:
+      tool: get_product
+      args: {model_or_family: "fam.diving_accessories"}
+      expect_ids: ["fam.diving_accessories"]
+
+  - id: prod-price-handoff
+    # Prices are not published — no price may ever be invented. The fact layer confirms the
+    # MCH-16 product exists, but the correct outcome is a handoff, not an answer.
+    question: "How much does the MCH-16 cost?"
+    expected_answer_contains: []
+    expected_source_ids: ["fam.mch_engine_bac"]
+    expected_outcome: handoff
+    fact:
+      tool: get_product
+      args: {model_or_family: "MCH-16"}
+      expect_ids: ["fam.mch_engine_bac"]
+
+  - id: prod-nameless-cabinet
+    # Exercises the null-model_name display rule (LLD-EXT-06): the fill-containment products
+    # carry no printed model number and must be presented by family name + variant.
+    question: "Do you supply fill containment cabinets?"
+    expected_answer_contains: ["cabinet"]
+    expected_source_ids: ["fam.fill_containment_cabinet"]
+    expected_outcome: answer
+    fact:
+      tool: get_product
+      args: {model_or_family: "Fill Containment Cabinets"}
+      expect_ids: ["fam.fill_containment_cabinet"]
+
+  # ---- company / docs (8) ------------------------------------------------
+  - id: co-certifications
+    question: "Which ISO certifications does Jyotech hold?"
+    expected_answer_contains: ["ISO 9001"]
+    expected_source_ids: ["cf.doc_about_s000.5"]
+    expected_outcome: answer
+    fact:
+      tool: get_company_fact
+      args: {kind: certification}
+      expect_ids: ["cf.doc_about_s000.5"]
+
+  - id: co-founded
+    question: "When was Jyotech founded?"
+    expected_answer_contains: ["199"]
+    expected_source_ids: ["cf.doc_about_s000.0"]
+    expected_outcome: answer
+    fact:
+      tool: get_company_fact
+      args: {kind: founded}
+      expect_ids: ["cf.doc_about_s000.0"]
+
+  - id: co-coverage
+    question: "Which countries does Jyotech serve besides India?"
+    expected_answer_contains: ["Bangladesh"]
+    expected_source_ids: ["cf.doc_about_s000.10"]
+    expected_outcome: answer
+    fact:
+      tool: get_company_fact
+      args: {kind: coverage}
+      expect_ids: ["cf.doc_about_s000.10"]
+
+  - id: co-facility
+    question: "Where are Jyotech's manufacturing facilities?"
+    expected_answer_contains: ["Noida"]
+    expected_source_ids: ["cf.doc_about_s000.3"]
+    expected_outcome: answer
+    fact:
+      tool: get_company_fact
+      args: {kind: facility}
+      expect_ids: ["cf.doc_about_s000.3"]
+
+  - id: docs-about
+    question: "Tell me about Jyotech Engineering."
+    expected_answer_contains: ["Jyotech"]
+    expected_source_ids: ["doc.about"]
+    expected_outcome: answer
+    retrieval:
+      query: "about Jyotech Engineering company established"
+      expect_doc: doc.about
+
+  - id: docs-process-catalogue
+    question: "What does your process engineering catalogue cover?"
+    expected_answer_contains: ["compressor"]
+    expected_source_ids: ["doc.jyotech_catalog_process"]
+    expected_outcome: answer
+    retrieval:
+      query: "process gas compressors catalogue reciprocating"
+      expect_doc: doc.jyotech_catalog_process
+
+  - id: docs-fs-catalogue
+    question: "Do you have a fire and diving equipment catalogue?"
+    expected_answer_contains: ["diving"]
+    expected_source_ids: ["doc.jyotech_catalog_f_s"]
+    expected_outcome: answer
+    retrieval:
+      query: "fire rescue diving equipment breathing air compressors catalogue"
+      expect_doc: doc.jyotech_catalog_f_s
+
+  - id: docs-truncation-canary
+    question: "Are your smoke exhausters and PPV blowers AMCA certified?"
+    expected_answer_contains: ["AMCA"]
+    expected_source_ids: ["ch.jyotech_catalog_f_s.0001"]
+    expected_outcome: answer
+    retrieval:
+      # Truncation canary (LLD-RET-02). "AMCA certified" sits at the END of the longest chunk
+      # (the F&S catalogue intro, 820 tokens) and occurs NOWHERE else in the corpus — if the
+      # embedder had silently truncated that chunk, this tail text would not be embedded and
+      # the passage would not be retrievable for this query. Pinned by its stable locator
+      # (page/§ heading), NOT a chunk id: chunk ids renumber whenever chunking config changes,
+      # and the canary must fail only on real truncation.
+      query: "AMCA certified smoke exhausters and PPV blowers"
+      expect_locator: "FIRE RESCUE & DIVING EQUIPMENT Catalogue"
+
+  # ---- after-sales (5) ---------------------------------------------------
+  - id: office-south
+    question: "Who covers the South of India? I'm in Chennai."
+    expected_answer_contains: ["Chennai"]
+    expected_source_ids: ["off.doc_contact_s000.2"]
+    expected_outcome: answer
+    fact:
+      tool: get_office
+      args: {region: "South"}
+      expect_ids: ["off.doc_contact_s000.2"]
+
+  - id: office-state-tn
+    question: "We're in Tamil Nadu — which office handles us?"
+    expected_answer_contains: ["Chennai"]
+    expected_source_ids: ["off.doc_contact_s000.2"]
+    expected_outcome: answer
+    fact:
+      tool: get_office
+      args: {state: "Tamil Nadu"}
+      expect_ids: ["off.doc_contact_s000.2"]
+
+  - id: office-city-mumbai
+    question: "Is there a Mumbai office?"
+    expected_answer_contains: ["Mumbai"]
+    expected_source_ids: ["off.doc_contact_s000.1"]
+    expected_outcome: answer
+    fact:
+      tool: get_office
+      args: {city: "Mumbai"}
+      expect_ids: ["off.doc_contact_s000.1"]
+
+  - id: office-east
+    question: "Who looks after eastern India?"
+    expected_answer_contains: ["Kolkata"]
+    expected_source_ids: ["off.doc_contact_s000.3"]
+    expected_outcome: answer
+    fact:
+      tool: get_office
+      args: {region: "East"}
+      expect_ids: ["off.doc_contact_s000.3"]
+
+  - id: office-head-fallback
+    question: "What's your head office?"
+    expected_answer_contains: ["NOIDA"]
+    expected_source_ids: ["off.doc_contact_s000.0"]
+    expected_outcome: answer
+    fact:
+      tool: get_office
+      args: {}
+      expect_ids: ["off.doc_contact_s000.0"]
+
+  - id: aftersales-service-kolkata
+    question: "My MCH-16 breathing air compressor needs servicing, we're in Kolkata."
+    expected_answer_contains: ["Kolkata"]
+    expected_source_ids: ["off.doc_contact_s000.3"]
+    expected_outcome: handoff
+    fact:
+      tool: get_office
+      args: {city: "Kolkata"}
+      expect_ids: ["off.doc_contact_s000.3"]
+
+  # ---- out of scope (2) --------------------------------------------------
+  - id: oos-weather
+    question: "What's the weather in Mumbai today?"
+    expected_answer_contains: []
+    expected_source_ids: []
+    expected_outcome: out_of_scope
+
+  - id: oos-poem
+    question: "Write me a poem about compressors."
+    expected_answer_contains: []
+    expected_source_ids: []
+    expected_outcome: out_of_scope

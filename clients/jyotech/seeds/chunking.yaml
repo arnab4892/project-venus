@@ -1,0 +1,86 @@
+# Per-document chunking disposition (LLD-RET-04). Edit `disposition` then re-run
+# `agentkit chunk run` / `agentkit release embed`.
+#   chunk          — split into embeddable chunks
+#   reference_only — keep the document + its facts, produce NO chunks (e.g. link hub)
+#   excluded       — drop entirely (nav / download stub)
+documents:
+  doc.about:
+    disposition: chunk
+    reason: 'content: 1249 prose words, 0 links (link-ratio 0.0)'
+  doc.air_lifting_bags_and_accessories:
+    disposition: chunk
+    reason: 'content: 374 prose words, 0 links (link-ratio 0.0)'
+  doc.air_seperation_plants:
+    disposition: chunk
+    reason: 'content: 50 prose words, 0 links (link-ratio 0.0)'
+  doc.career:
+    disposition: chunk
+    reason: 'content: 321 prose words, 0 links (link-ratio 0.0)'
+  doc.catalogue_testing:
+    disposition: reference_only
+    reason: "approved override \u2192 reference_only (content: 94 prose words, 0 links (link-ratio\
+  \ 0.0))"
+  doc.cng_bio_gas_compressors:
+    disposition: chunk
+    reason: 'content: 329 prose words, 0 links (link-ratio 0.0)'
+  doc.cng_boosters:
+    disposition: chunk
+    reason: 'content: 103 prose words, 0 links (link-ratio 0.0)'
+  doc.compact_and_super_silent_machine:
+    disposition: chunk
+    reason: 'content: 247 prose words, 0 links (link-ratio 0.0)'
+  doc.contact:
+    disposition: excluded
+    reason: 'stub: 36 prose words (< 40), 0 links'
+  doc.diaphragm_compressors:
+    disposition: chunk
+    reason: 'content: 103 prose words, 0 links (link-ratio 0.0)'
+  doc.diving_accessories:
+    disposition: chunk
+    reason: 'content: 147 prose words, 0 links (link-ratio 0.0)'
+  doc.fire_protection_disaster_management_equipment:
+    disposition: chunk
+    reason: 'content: 186 prose words, 0 links (link-ratio 0.0)'
+  doc.gallery_test2:
+    disposition: excluded
+    reason: "approved override \u2192 excluded (content: 295 prose words, 0 links (link-ratio\
+  \ 0.0))"
+  doc.hydraulic_cutting_tools:
+    disposition: chunk
+    reason: 'content: 353 prose words, 0 links (link-ratio 0.0)'
+  doc.hydrogen_compressors_and_fueling_system:
+    disposition: chunk
+    reason: 'content: 212 prose words, 0 links (link-ratio 0.0)'
+  doc.index:
+    disposition: chunk
+    reason: 'content: 141 prose words, 0 links (link-ratio 0.0)'
+  doc.jyotech_catalog_f_s:
+    disposition: chunk
+    reason: 'content: 3569 prose words, 0 links (link-ratio 0.0)'
+  doc.jyotech_catalog_process:
+    disposition: chunk
+    reason: 'content: 1298 prose words, 0 links (link-ratio 0.0)'
+  doc.leak_control_kit:
+    disposition: chunk
+    reason: 'content: 579 prose words, 0 links (link-ratio 0.0)'
+  doc.low_pressure_breathing_air_system:
+    disposition: chunk
+    reason: 'content: 513 prose words, 0 links (link-ratio 0.0)'
+  doc.medium_and_high_pressure_air:
+    disposition: chunk
+    reason: 'content: 165 prose words, 0 links (link-ratio 0.0)'
+  doc.portable_compressor:
+    disposition: chunk
+    reason: 'content: 180 prose words, 0 links (link-ratio 0.0)'
+  doc.ppv_blowers_and_smoke_extractors:
+    disposition: chunk
+    reason: 'content: 342 prose words, 0 links (link-ratio 0.0)'
+  doc.process_gas_compressors:
+    disposition: chunk
+    reason: 'content: 168 prose words, 0 links (link-ratio 0.0)'
+  doc.surface_demand_diving_equipment:
+    disposition: chunk
+    reason: 'content: 229 prose words, 0 links (link-ratio 0.0)'
+  doc.under_water_breathing_apparatus_set:
+    disposition: chunk
+    reason: 'content: 137 prose words, 0 links (link-ratio 0.0)'
