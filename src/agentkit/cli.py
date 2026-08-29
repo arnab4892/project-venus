@@ -25,6 +25,7 @@ extract_app = typer.Typer(help="Extract facts to staging (LLM).", no_args_is_hel
 release_app = typer.Typer(help="Release candidates + review export.", no_args_is_help=True)
 chunk_app = typer.Typer(help="Chunk the active release for embedding.", no_args_is_help=True)
 eval_app = typer.Typer(help="Golden-suite evaluation.", no_args_is_help=True)
+prompt_app = typer.Typer(help="Prompt versioning in ops.prompt_version.", no_args_is_help=True)
 app.add_typer(db_app, name="db")
 app.add_typer(seed_app, name="seed")
 app.add_typer(tools_app, name="tools")
@@ -33,6 +34,7 @@ app.add_typer(extract_app, name="extract")
 app.add_typer(release_app, name="release")
 app.add_typer(chunk_app, name="chunk")
 app.add_typer(eval_app, name="eval")
+app.add_typer(prompt_app, name="prompt")
 
 # Repo root = two levels up from this file (src/agentkit/cli.py -> src -> root).
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -468,6 +470,164 @@ def release_rollback_cmd(
         with conn.begin():
             activate(conn, release_id)
     typer.echo(f"Rolled back to {release_id}.")
+
+
+@prompt_app.command("load")
+def prompt_load_cmd(
+    client: Optional[str] = typer.Argument(
+        None, help="Client id (default: the single clients/* dir)."
+    ),
+) -> None:
+    """Load the runtime prompt manifest into ops.prompt_version (new inactive versions).
+
+    Also upserts ops.client from config.yaml + the active release. Activate a loaded version
+    with `agentkit prompt activate <id>` (golden-gated).
+    """
+    from agentkit.db.engine import connect
+    from agentkit.ingest.sources import autodetect_client
+    from agentkit.runtime.prompts import load_prompts
+
+    client = client or autodetect_client()
+    with connect() as conn:
+        with conn.begin():
+            written = load_prompts(conn, client)
+    typer.echo(f"Loaded {len(written)} prompt version(s) into ops.prompt_version (inactive):")
+    for w in written:
+        typer.echo(f"  {w['prompt_id']:36} agent={w['agent']} v{w['version']}")
+    typer.echo("Activate each with:  agentkit prompt activate <prompt_id>")
+
+
+@prompt_app.command("activate")
+def prompt_activate_cmd(
+    prompt_id: str = typer.Argument(..., help="Prompt version id, e.g. pv.jyotech.triage.1."),
+) -> None:
+    """Activate a prompt version, gated by the golden suite (LLD-EVAL-03).
+
+    The activation and the fact + retrieval layers share one transaction: a fact/retrieval
+    failure rolls the activation back and the prompt stays inactive, exactly like
+    `release activate`.
+    """
+    from sqlalchemy import text as _text
+
+    from agentkit.db.engine import connect
+    from agentkit.eval.runner import format_report
+    from agentkit.runtime.prompts import activate_prompt_gated
+
+    with connect() as conn:
+        trans = conn.begin()
+        try:
+            client = conn.execute(
+                _text("SELECT client_id FROM ops.prompt_version WHERE prompt_id = :p"),
+                {"p": prompt_id},
+            ).scalar_one_or_none()
+            if client is None:
+                raise typer.BadParameter(f"unknown prompt_id {prompt_id!r}")
+            activated, report = activate_prompt_gated(conn, prompt_id, client)
+        except Exception:
+            trans.rollback()
+            raise
+        if not activated:
+            trans.rollback()
+            typer.echo(format_report(report))
+            typer.echo(f"\nGolden suite FAILED — {prompt_id} NOT activated (LLD-EVAL-03).")
+            raise typer.Exit(code=1)
+        trans.commit()
+    typer.echo(f"Activated {prompt_id}. Golden suite passed (fact + retrieval; e2e pending).")
+
+
+@app.command("chat")
+def chat_cmd(
+    client: Optional[str] = typer.Argument(
+        None, help="Client id (default: the single clients/* dir)."
+    ),
+    session: Optional[str] = typer.Option(None, "--session", help="Resume/label a session uuid."),
+    show_trace: bool = typer.Option(
+        False, "--show-trace", help="After each turn print the ops rows written (data-model §4 style)."
+    ),
+) -> None:
+    """Interactive chat against the runtime LLM (LLD-RT). Type /quit to end.
+
+    Uses the self-hosted runtime LLM (LLM_BASE_URL) and the active release. Each turn is
+    persisted to ops.*; --session resumes a prior conversation from those rows.
+    """
+    import uuid as _uuid
+
+    from agentkit.client_config import gas_alias_map
+    from agentkit.db.engine import connect
+    from agentkit.ingest.sources import autodetect_client
+    from agentkit.retrieval.chunk import resolve_active_release
+    from agentkit.runtime.llm import build_runtime_client
+    from agentkit.runtime.ops import create_session, rebuild_context, session_exists
+    from agentkit.runtime.orchestrator import Ctx, run_turn
+
+    client = client or autodetect_client()
+    runtime_client = build_runtime_client()
+    ctx_complete = runtime_client.complete_fn()
+
+    with connect() as conn:
+        # session lifecycle (all reads/writes inside a transaction so no autobegin lingers
+        # before the next explicit begin).
+        with conn.begin():
+            release_id = resolve_active_release(conn)
+            if session:
+                sid = _uuid.UUID(session)
+                if not session_exists(conn, sid):
+                    create_session(conn, client, release_id, session_id=sid)
+            else:
+                sid = create_session(conn, client, release_id)
+
+        ctx = Ctx(
+            conn=conn,
+            client=client,
+            complete=ctx_complete,
+            embed=None,  # live self-hosted embedder for search_documents
+            gas_aliases=gas_alias_map(client),
+        )
+        typer.echo(f"session {sid}  release {release_id}  (type /quit to end)")
+        while True:
+            try:
+                user = input("you › ").strip()
+            except (EOFError, KeyboardInterrupt):
+                typer.echo("")
+                break
+            if not user:
+                continue
+            if user.lower() in ("/quit", "/exit", "quit", "exit"):
+                break
+            with conn.begin():
+                history = rebuild_context(conn, sid)
+                result = run_turn(ctx, sid, user, history=history)
+            for m in result.messages:
+                typer.echo(f"bot › {m['text']}")
+            for c in result.citations:
+                loc = c.get("locator") or ""
+                url = c.get("url") or ""
+                typer.echo(f"     ↳ [{c['kind']}] {c['ref_id']} {loc} {url}".rstrip())
+            if show_trace:
+                _print_trace(result)
+
+
+def _print_trace(result) -> None:
+    """Print the ops rows written this turn, data-model §4 style."""
+    typer.echo("  ── trace ──────────────────────────────────────────")
+    tri = result.triage or {}
+    typer.echo(
+        f"  turn {result.turn_id}  outcome={result.outcome}  routed={result.route}"
+    )
+    typer.echo(
+        f"  triage {{division:{tri.get('division')} intent:{tri.get('intent')} "
+        f"language:{tri.get('language')} in_scope:{tri.get('in_scope')} "
+        f"confidence:{tri.get('confidence')}}}"
+    )
+    for inv in result.invocations:
+        typer.echo(f"  agent_invocation {inv['agent']}  prompt={inv['prompt_id']}")
+        for tc in inv["tool_calls"]:
+            typer.echo(f"    tool_call {tc['tool']} args={json.dumps(tc['args'], default=str)} rows={tc['rows_returned']}")
+    if result.grounding:
+        typer.echo(f"  grounding {json.dumps(result.grounding, default=str)}")
+    for c in result.citations:
+        typer.echo(f"  citation {c['kind']} {c['ref_id']} {c.get('locator') or ''}")
+    typer.echo("  ───────────────────────────────────────────────────")
 
 
 @tools_app.command("match-capability")
