@@ -70,6 +70,20 @@ def test_gate_prunes_failing_list_elements_only() -> None:
     assert drops[0].value == "oxygen"
 
 
+def test_is_verbatim_is_case_sensitive() -> None:
+    # The section says lowercase "hydrogen"; a differently-cased quote is NOT verbatim.
+    assert is_verbatim("hydrogen", _SECTION)
+    assert not is_verbatim("HYDROGEN", _SECTION)
+
+
+def test_gate_drops_case_mismatched_evidence() -> None:
+    # A gas whose quote differs from the source only in case is dropped, not "fixed".
+    obj = {"gases": [{"value": "hydrogen", "evidence": "HYDROGEN"}]}
+    cleaned, drops = apply_gate(obj, _SECTION, section_id="s1")
+    assert cleaned["gases"] == []
+    assert len(drops) == 1
+
+
 def test_normalise_ws_collapses_runs() -> None:
     assert normalise_ws("a  \n  b\t c") == "a b c"
 

@@ -64,3 +64,51 @@ def test_export_workbook_structure(seeded_conn, tmp_path) -> None:
 
     # The RC is advanced to exported.
     assert get_rc(seeded_conn, rc)["status"] == "exported"
+
+
+_BASE = dict(
+    source_doc_id="doc.process", source_locator="p1 §Process",
+    section_id="doc.process::s001", confidence=0.9, review_status="pending",
+)
+
+
+def test_empty_attributes_render_blank_not_repr(seeded_conn, tmp_path) -> None:
+    # {"printed": []} must export as a blank cell, never the leaked repr "printed=[]".
+    rc = create_rc(seeded_conn, "jyotech")
+    prod = ("product", {
+        "product_id": "prd.1", "family_id": "fam.process_recip", "model_name": "X",
+        "attributes": {"printed": []}, "needs_family": False, "conflict_group": None,
+        "evidence": {}, **_BASE,
+    })
+    out = tmp_path / "review.xlsx"
+    write_rows(seeded_conn, rc_id=rc, document_rows=_DOCS, content_rows=[prod])
+    export_rc(seeded_conn, rc, out)
+
+    ws = load_workbook(out)["product"]
+    headers = [c.value for c in ws[1]]
+    row2 = {h: c.value for h, c in zip(headers, ws[2])}
+    assert row2["attributes"] in (None, "")          # blank, not "printed=[]"
+
+
+def test_gas_sheet_shows_parent_provenance(seeded_conn, tmp_path) -> None:
+    # capability_gas has no source columns of its own; the sheet fills them display-only
+    # from the parent capability_row so the reviewer can see where the row came from.
+    rc = create_rc(seeded_conn, "jyotech")
+    cap = ("capability_row", {
+        "cap_id": "cap.a", "family_id": "fam.process_recip",
+        "needs_family": False, "conflict_group": None, "evidence": {}, **_BASE,
+    })
+    gas = ("capability_gas", {
+        "cap_id": "cap.a", "gas": "H2", "evidence": {"gas": "H2"},
+        "section_id": "doc.process::s001", "confidence": 0.9, "review_status": "pending",
+        "needs_family": False, "conflict_group": None,
+    })
+    out = tmp_path / "review.xlsx"
+    write_rows(seeded_conn, rc_id=rc, document_rows=_DOCS, content_rows=[cap, gas])
+    export_rc(seeded_conn, rc, out)
+
+    ws = load_workbook(out)["capability_gas"]
+    headers = [c.value for c in ws[1]]
+    row2 = {h: c.value for h, c in zip(headers, ws[2])}
+    assert row2["source_doc_id"] == "doc.process"
+    assert row2["source_locator"] == "p1 §Process"

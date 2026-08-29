@@ -172,6 +172,30 @@ def test_active_views_follow_is_active(seeded_conn):
     assert after["matches"][0]["headroom"]["pressure"] == pytest.approx(1 - 350 / 999)
 
 
+def test_unknown_capacity_unit_is_non_comparable_not_a_crash(seeded_conn):
+    """A row stored in a unit outside the canonical vocabulary (e.g. Kg/hr) must not
+    crash the tool: capacity is non-comparable (headroom None), pressure still applies."""
+    conn = seeded_conn
+    conn.execute(text(
+        "INSERT INTO facts.capability_row "
+        "(cap_id, release_id, family_id, comp_type, capacity_max, capacity_unit, "
+        " discharge_p_max, pressure_unit, source_doc_id, source_locator) "
+        "SELECT 'cap.kghr', 'r2026.08.1', 'fam.process_recip', 'diaphragm', 500, 'Kg/hr', "
+        " 850, 'barg', source_doc_id, source_locator "
+        "FROM facts.capability_row WHERE release_id='r2026.08.1' AND cap_id='cap.002'"
+    ))
+    conn.execute(text(
+        "INSERT INTO facts.capability_gas (cap_id, release_id, gas) "
+        "VALUES ('cap.kghr', 'r2026.08.1', 'hydrogen')"
+    ))
+    result = match_capability(
+        conn, gas="hydrogen", capacity=3000, capacity_unit="Nm3/hr", discharge_p=350,
+    )
+    match = next(m for m in result["matches"] if m["cap_id"] == "cap.kghr")
+    assert match["headroom"]["capacity"] is None       # non-comparable, never guessed
+    assert match["headroom"]["pressure"] == pytest.approx(1 - 350 / 850)
+
+
 def test_one_active_release_enforced(seeded_conn):
     """The partial unique index on release(is_active) forbids a second active release."""
     from sqlalchemy.exc import IntegrityError

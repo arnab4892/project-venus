@@ -105,3 +105,12 @@ def load_family_ids(client: str) -> set[str]:
         return set()
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     return {f["id"] for f in data.get("families", []) if f.get("id")}
+
+
+def load_families(client: str) -> list[dict]:
+    """The full frozen family entries from ``families.yaml`` (empty if absent)."""
+    path = families_path(client)
+    if not path.exists():
+        return []
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return list(data.get("families", []) or [])

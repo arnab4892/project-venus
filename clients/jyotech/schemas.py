@@ -245,12 +245,19 @@ def build_rows(
             )
             out.append(("capability_row", row))
             # capability_gas mirrors only (cap_id, gas) + review/marker columns —
-            # it has no source_doc_id/source_locator of its own.
-            for gas in _list_values(item.get("gases")):
+            # its provenance is the parent capability_row's, by design. Keep the gas
+            # VALUE verbatim and store the gate-approved evidence QUOTE (source case),
+            # not a re-derivation from the (possibly lowercased) value.
+            for gnode in item.get("gases") or []:
+                gval = unwrap(gnode)
+                if gval is None:
+                    continue
+                gquote = _ev_phrase(gnode)
                 out.append((
                     "capability_gas",
-                    dict(cap_id=cap_id, gas=gas, needs_family=False, conflict_group=None,
-                         evidence={"gas": gas}, section_id=section.section_id,
+                    dict(cap_id=cap_id, gas=gval, needs_family=False, conflict_group=None,
+                         evidence={"gas": gquote if gquote is not None else gval},
+                         section_id=section.section_id,
                          confidence=confidence, review_status="pending"),
                 ))
 

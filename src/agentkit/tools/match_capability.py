@@ -40,6 +40,32 @@ def _as_float(value) -> float | None:
     return None if value is None else float(value)
 
 
+def _safe_convert_capacity(capacity: float, query_unit: str, row_unit) -> float | None:
+    """Convert the query capacity into a row's unit, or ``None`` if not comparable.
+
+    A row whose stored unit is null or outside the canonical vocabulary (e.g.
+    ``Kg/hr``, ``cfm``, ``lumen`` — a normalise-vocabulary gap deferred to a later
+    milestone) is treated as **non-comparable** on capacity, never guessed and
+    never a crash.
+    """
+    if row_unit is None:
+        return None
+    try:
+        return convert_capacity(capacity, query_unit, row_unit)
+    except ValueError:
+        return None
+
+
+def _pressure_comparable(row_unit) -> bool:
+    """True iff the row's pressure unit canonicalises to the query basis (barg)."""
+    if row_unit is None:
+        return False
+    try:
+        return canonical_pressure_unit(row_unit) == canonical_pressure_unit("barg")
+    except ValueError:
+        return False
+
+
 def match_capability(
     conn: Connection,
     gas: str,
@@ -83,22 +109,27 @@ def match_capability(
         p_max = _as_float(row["discharge_p_max"])
         p_min = _as_float(row["discharge_p_min"])
 
-        # normalise the query capacity into this cap's stored unit
-        conv_capacity = convert_capacity(capacity, query_cap_unit, row["capacity_unit"])
+        # normalise the query capacity into this cap's stored unit; a unit outside
+        # the canonical vocabulary is non-comparable, not a crash.
+        conv_capacity = _safe_convert_capacity(capacity, query_cap_unit, row["capacity_unit"])
+        cap_comparable = conv_capacity is not None
+        p_comparable = _pressure_comparable(row["pressure_unit"])
 
-        # capacity envelope
-        if cap_max is not None and conv_capacity > cap_max:
-            continue
-        if cap_min is not None and conv_capacity < cap_min:
-            continue
-        # pressure envelope (barg)
-        if p_max is not None and discharge_p > p_max:
-            continue
-        if p_min is not None and discharge_p < p_min:
-            continue
+        # capacity envelope (only where comparable)
+        if cap_comparable:
+            if cap_max is not None and conv_capacity > cap_max:
+                continue
+            if cap_min is not None and conv_capacity < cap_min:
+                continue
+        # pressure envelope (barg, only where comparable)
+        if p_comparable:
+            if p_max is not None and discharge_p > p_max:
+                continue
+            if p_min is not None and discharge_p < p_min:
+                continue
 
-        cap_ratio = conv_capacity / cap_max if cap_max else None
-        p_ratio = discharge_p / p_max if p_max else None
+        cap_ratio = conv_capacity / cap_max if (cap_comparable and cap_max) else None
+        p_ratio = discharge_p / p_max if (p_comparable and p_max) else None
         if (cap_ratio is not None and cap_ratio > _NEAR_EDGE_RATIO) or (
             p_ratio is not None and p_ratio > _NEAR_EDGE_RATIO
         ):
