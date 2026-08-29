@@ -1,7 +1,7 @@
 ---
 document: LLD
 product: Jyotech Agent
-version: 1.9
+version: 1.10
 aligned_to_hld: 1.2
 aligned_to_prd: 1.2
 status: Approved
@@ -94,7 +94,7 @@ All tools are pure functions over the `facts.active_*` views and return JSON. Lo
 
 | ID | Tool | Signature → result |
 |---|---|---|
-| LLD-TOOL-01 | `match_capability(gas, capacity, capacity_unit, discharge_p, lubricated?, standard?)` → `{matches:[{cap_id, family_id, headroom:{capacity, pressure}}], near_edge: bool}`; `headroom = 1 − value/limit` per dimension; near_edge when any `value/limit` ratio > 0.9. Pure over the `facts.active_*` views. Unit conversion per LLD-EXT-09. A row whose unit is null or outside the canonical vocabulary is **non-comparable** on that dimension: the comparison is skipped (headroom `None`), never guessed. Design note for the tool/runtime milestone: a per-client **gas alias map** (`hydrogen→H2`, `oxygen→O2`, …) applied at query time (facts stay verbatim); null-boolean filter semantics (`lubricated` null = "unspecified/both offered", not excluded by an oil-free filter, returned with a caveat); extend the normalise vocabulary (cfm, lpm, lumen, tons, TPD, kg/hr, psi, W, kg/cm2g). |
+| LLD-TOOL-01 | `match_capability(gas, capacity, capacity_unit, discharge_p, lubricated?, standard?)` → `{matches, non_comparable_candidates, any_near_edge}`. **`matches`** = rows where every requested comparable filter passed, ranked by fit; each match carries `{cap_id, family_id, headroom:{capacity, pressure}, near_edge, caveats}` — `headroom = 1 − value/limit` per dimension, **`near_edge` is per-match** (any of its own ratios > 0.9). A row that FAILS a comparable filter is excluded entirely. **`non_comparable_candidates`** = rows where a filter could not be evaluated (unit mismatch or null), listed with the reason, never presented as matches. Pure over the `facts.active_*` views; unit conversion per LLD-EXT-09 within a unit's own family only. Per-client gas alias map (`clients/<client>/config.yaml`: `hydrogen→H2`, …) applied at query time — facts stay verbatim. Null `lubricated` = "unspecified/both offered": kept under an oil-free filter with a `lubricated_unspecified` caveat. Null/unknown-unit numerics stay non-comparable (skipped, never guessed). |
 | LLD-TOOL-02 | `list_products(division, category?)` → families + products. |
 | LLD-TOOL-03 | `get_product(model_or_family)` → product ⋈ family; alias normalisation strips spaces/hyphens (`MCH16` = `MCH-16`). |
 | LLD-TOOL-04 | `search_documents(query, division?, family_ids?, k=5)` → chunks with locator + url (LLD-RET-03). |
@@ -103,13 +103,15 @@ All tools are pure functions over the `facts.active_*` views and return JSON. Lo
 
 ## 7. Orchestrator (LLD-RT) — implements HLD-C-06
 
+Runtime prompts live in `ops.prompt_version`: `agentkit prompt load <client>` versions the file manifest into the DB, `agentkit prompt activate <id>` flips `is_active` **gated by the golden suite** (LLD-EVAL-03); the runtime reads only the active version (file fallback only when `ops` is empty, logged loudly), and every `ops.agent_invocation` records the prompt_version id it ran with.
+
 | ID | Item |
 |---|---|
-| LLD-RT-01 | FastAPI `POST /v1/chat` `{session_id?, client_id, messages:[...]}` → SSE stream of `message` events (each with `kind`, `seq_in_turn`) and a final `turn` event. |
-| LLD-RT-02 | LangGraph state: `{session, turn, user_messages[], triage, slots, agent, tool_results[], draft, grounding, outcome}`; checkpointer = Postgres (ops schema). |
+| LLD-RT-01 | FastAPI `POST /v1/chat` `{session_id?, client_id, messages:[...]}` → SSE stream of `message` events (each with `kind`, `seq_in_turn`) and a final `turn` event. (Widget/API milestone; 5a delivers `agentkit chat <client> [--session <id>] [--show-trace]`, an interactive CLI loop over the same graph.) |
+| LLD-RT-02 | LangGraph state: `{session, turn, user_messages[], triage, slots, agent, tool_results[], draft, grounding, outcome}`. As built (5a): a **thin in-memory StateGraph** — all persistence via explicit `ops.*` inserts in the nodes; `--session` resume rebuilds context from the ops rows. The Postgres checkpointer is deferred to the widget/API milestone (async resumption); the ops rows remain the **single source of truth** even after it lands. |
 | LLD-RT-03 | Nodes: `ingest_user` → `triage` → `route` → `<agent>` → `ground` → `respond` | `handoff`. |
 | LLD-RT-04 | Triage output schema `{division, intent ∈ {application_enquiry, product_question, documents, after_sales, commercial, faq, out_of_scope}, language, in_scope, pii_present, confidence}`; confidence < 0.6 → ask a one-line clarifying question (outcome `clarify`). |
-| LLD-RT-05 | Grounding gate: draft is split into claims; each claim must cite a `tool_result` id; uncited factual claims are removed and, if any were removed, a "not published" sentence + handoff offer is appended. Result stored in `turn.grounding`. |
+| LLD-RT-05 | Grounding gate, as built (5a): an `action=answer` message must carry ≥1 citation resolving to a real `tool_result` id from this turn, **and** every number in the outgoing text must appear in this turn's tool results or retrieved chunks after unit-token stripping (**numeric guard** — an unsourced number is treated exactly like an uncited answer). Unbacked → strip and fall back to a "not in our published material" sentence + handoff offer. Result stored in `turn.grounding`. Per-claim splitting (this item's original wording) is a deferred refinement. |
 | LLD-RT-06 | Every user message and every emitted message row is written before the SSE event is sent. |
 | LLD-RT-07 | Language: triage detects; agent prompts include `respond_in`; retrieval query is translated to English when needed. |
 
@@ -119,7 +121,7 @@ Each agent = prompt (from `ops.prompt_version`) + allowed tool list + output sch
 
 | ID | Agent | Tools | Behaviour |
 |---|---|---|---|
-| LLD-AG-01 | application_discovery | 01, 04 | Slot order gas → capacity → discharge_p → lubricated → standard → industry → timeline; one question per turn; calls match_capability when gas+capacity+discharge_p known; ranges stated as *published limits*, never as a quote. |
+| LLD-AG-01 | application_discovery | 01, 04 | Slot order gas → capacity → discharge_p → lubricated → standard → industry → timeline; one question per turn, never guess a value; calls match_capability when gas+capacity+discharge_p known. **The top match's own row is the authority for every number in the answer** (published limits, never a quote); `search_documents` is called only after top-match selection, filtered to that family with the family name in the query, for supporting prose; a near-edge caveat only when the top match's own flag is true; customer-facing family names only (no `fam.*` ids, no slot vocabulary); non-comparable candidates at most one sentence offering engineer review. |
 | LLD-AG-02 | product_advisor | 02, 03, 04 | Exact model names; attributes only if in tool result. |
 | LLD-AG-03 | documents_compliance | 04, 05, 06 | Serves `document_card` messages for PDFs/certs; verbatim company facts. |
 | LLD-AG-04 | after_sales_intake | 03, 06 | Collects model, serial/year, site, need, contact; no diagnosis; action handoff with `lead_type=after_sales`. |
@@ -158,6 +160,7 @@ Each agent = prompt (from `ops.prompt_version`) + allowed tool list + output sch
 
 | Version | Date | CR | Aligned to HLD / PRD | Summary |
 |---|---|---|---|---|
+| 1.10 | 2026-08-29 | — (clarification, from milestone-5a-notes) | 1.2 / 1.2 | Runtime as built: prompt versioning preamble (load/activate gated by the golden suite, agent_invocation records prompt_version); RT-01 CLI chat now / API-SSE at the widget milestone; RT-02 thin in-memory StateGraph with ops-inserts persistence, checkpointer deferred, ops = source of truth; RT-05 gate as built (citation + numeric guard, per-claim deferred); TOOL-01 result split into matches (per-match near_edge, caveats) vs non_comparable_candidates, alias map + null-lubricated caveat + extended vocabulary now implemented; AG-01 row-is-authority + family-scoped retrieval + presentation rules (from the live hydrogen fix cycle). |
 | 1.9 | 2026-08-29 | — (clarification, from milestone-4-notes) | 1.2 / 1.2 | Retrieval/tools/eval as built: mechanical family tagging + derived chunk division (RET-01); bge-m3 tokenizer config + locator-pinned canary (RET-02); disposition in `chunking.yaml` with the chunk-run human gate (RET-04); tool logging deferred until `ops.*` exists (LLD-TOOL preamble); golden suite frozen at 46 with execution blocks + id-maintenance rule (EVAL-01); golden gate on `release activate` with rollback-on-failure, embedding best-effort at promote (EVAL-03). |
 | 1.8 | 2026-08-29 | — (clarification, from milestone-3b-notes) | 1.2 / 1.2 | Release machinery as built: `capability_gas` provenance inherited via parent FK (LLD-DB-02); `model_name` nullable when unprinted, migration `0003` + runtime display rule (LLD-EXT-06); LLD-REL-03 rewritten as the implemented check (hard failures incl. unit-on-numerics and the schema-driven NOT-NULL safety net, warnings, office→region mapping); LLD-REL-05 provenance scoping, families.yaml multi-source parsing, `rYYYY.MM.N` ids; LLD-TOOL-01 non-comparable-unit rule + deferred alias-map/null-boolean/vocabulary design note. |
 | 1.7 | 2026-08-28 | — (clarification, from milestone-3a-notes) | 1.2 / 1.2 | Extraction as built: `0002` staging additions (`conflict_group`, `needs_family`, `section_id`; `release_candidate` ledger, no-FK stance) in LLD-DB-06; provider-configurable sampling + call logging + cache-aware cost reporting in LLD-EXT §3; section/artifact details (EXT-01/02), families.yaml stop + frozen-family rule (EXT-03), code-level evidence gate (EXT-04), range parsing (EXT-09), RC idempotency + file-based prompts (EXT-10); export as built + RC lifecycle (REL-01), import decision semantics (REL-02), promote ledger-status gate + product_family from families.yaml (REL-05). |
