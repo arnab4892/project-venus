@@ -41,6 +41,11 @@ dev = [
     "pytest-asyncio>=0.24,<0.25",
     "ruff>=0.7,<0.8",
 ]
+# Dev-only chat harness (apps/dev_ui.py). Not part of the shipped wheel; pinned to
+# the current stable gradio major (5.x). See apps/README.md.
+ui = [
+    "gradio>=5,<6",
+]
 
 [project.scripts]
 agentkit = "agentkit.cli:app"
