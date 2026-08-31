@@ -114,11 +114,11 @@ def test_stream_turn_creates_session_once_across_turns():
         return _fake_result()
 
     for _ in stream_turn(
-        "q1", state, turn_runner=turn_runner, session_provider=provider, poll=0.01
+        "q1", state, turn_runner=turn_runner, session_provider=provider, poll=0.01, token_delay=0
     ):
         pass
     for _ in stream_turn(
-        "q2", state, turn_runner=turn_runner, session_provider=provider, poll=0.01
+        "q2", state, turn_runner=turn_runner, session_provider=provider, poll=0.01, token_delay=0
     ):
         pass
 
@@ -138,7 +138,7 @@ def test_stream_turn_yields_status_then_tokens_then_final():
 
     updates = list(
         stream_turn(
-            "hello", state, turn_runner=turn_runner, session_provider=provider, poll=0.01
+            "hello", state, turn_runner=turn_runner, session_provider=provider, poll=0.01, token_delay=0
         )
     )
 
@@ -199,7 +199,7 @@ def test_stream_turn_surfaces_turn_runner_exception_as_error_update():
 
     updates = list(
         stream_turn(
-            "hello", state, turn_runner=turn_runner, session_provider=provider, poll=0.01
+            "hello", state, turn_runner=turn_runner, session_provider=provider, poll=0.01, token_delay=0
         )
     )
 
@@ -266,6 +266,7 @@ def test_stream_turn_status_updates_come_from_stage_source():
         session_provider=provider,
         stage_source=iter(labels),
         poll=0.01,
+        token_delay=0,
     ):
         if up.kind == STATUS:
             statuses.append(up.status)

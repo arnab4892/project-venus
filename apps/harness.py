@@ -191,6 +191,7 @@ def stream_turn(
     stage_source: Optional[Iterable[str]] = None,
     clock: Callable[[], float] = time.monotonic,
     poll: float = 0.1,
+    token_delay: float = 0.03,
 ) -> Iterator[Update]:
     """Drive one turn, yielding Updates: STATUS… then TOKEN… then FINAL — or ERROR.
 
@@ -202,6 +203,10 @@ def stream_turn(
     - ``stage_source``: optional iterator of status strings — the seam the deferred
       read-only ``on_stage`` queue plugs into. Defaults to a single honest generic
       indicator with elapsed seconds.
+    - ``token_delay``: seconds slept after each TOKEN emission so the typewriter phase
+      actually paces out (Gradio repaints per yield); without it every word lands in one
+      frame and the answer appears in a single paint. Tests pass ``0`` to stay fast — the
+      ordering assertions are unaffected.
 
     An initial STATUS update is always emitted before the first thread join, so the
     ordering (status → final/error) is deterministic even when the turn returns instantly.
@@ -251,6 +256,8 @@ def stream_turn(
     final_text = render_messages(getattr(result, "messages", None) or [])
     for word in _iter_words(final_text):
         yield Update(kind=TOKEN, delta=word)
+        if token_delay:
+            time.sleep(token_delay)
     yield Update(
         kind=FINAL,
         text=final_text,
