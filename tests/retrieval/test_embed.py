@@ -38,6 +38,19 @@ def test_embedding_table_name_sanitises_release_id():
     assert embedding_table("r2026.08.1") == "chunk_embedding_r2026_08_1"
 
 
+def test_embed_auth_key_sent_when_auth_on_and_omitted_when_off():
+    # EMBED_AUTH=true → the bearer key is wired into the embedding client; EMBED_AUTH=false force-
+    # disables auth even with a key present, leaving the "not-needed" placeholder path in _client().
+    on = client_from_settings(Settings(_env_file=None, embed_auth=True, embed_api_key="sk-e"))
+    assert on.api_key == "sk-e"
+
+    off = client_from_settings(Settings(_env_file=None, embed_auth=False, embed_api_key="sk-e"))
+    assert off.api_key == ""
+
+    # backward-compatible default: no key set → nothing to send (placeholder used in _client())
+    assert client_from_settings(Settings(_env_file=None)).api_key == ""
+
+
 def test_client_uses_embed_endpoint_not_llm():
     """PRD-N-002: chunk + query vectors come from the self-hosted EMBED endpoint only."""
     settings = Settings(
