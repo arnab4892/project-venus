@@ -375,6 +375,9 @@ questions:
     # version as the whole story. The F&S catalogue is the source.
     question: "Tell me about the MCH-16."
     expected_answer_contains: ["265", "petrol", "electric"]
+    # Voice: provenance rides in the citations, never in the prose (Part C). Not a document ask,
+    # so no document/catalogue/page/"Source:" line may appear in the answer text.
+    must_not_contain: ["Source:", "catalog", "catalogue", "page)"]
     expected_source_ids: ["doc.jyotech_catalog_f_s"]
     expected_outcome: answer
     fact:
@@ -414,6 +417,9 @@ questions:
   - id: co-certifications
     question: "Which ISO certifications does Jyotech hold?"
     expected_answer_contains: ["ISO 9001"]
+    # Voice (Part C): a certifications answer names no document/catalogue/page in prose — the
+    # source is rendered from the structured citations only.
+    must_not_contain: ["Source:", "catalog", "catalogue", "page)"]
     expected_source_ids: ["cf.doc_about_s000.5"]
     expected_outcome: answer
     fact:
@@ -446,7 +452,9 @@ questions:
     # surface API-618 from the process catalogue and never claim it isn't published.
     question: "Are your machines API-618 compliant?"
     expected_answer_contains: ["API-618"]
-    must_not_contain: ["don't have", "do not have", "not in our published", "can't confirm", "not published"]
+    # Existing absence guards + Part C voice guards: this is a machine-compliance question, not a
+    # request for a document, so the answer speaks as Jyotech and names no catalogue/page/source.
+    must_not_contain: ["don't have", "do not have", "not in our published", "can't confirm", "not published", "Source:", "catalog", "catalogue", "page)"]
     expected_source_ids: ["doc.jyotech_catalog_process"]
     expected_outcome: answer
 
