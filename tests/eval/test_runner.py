@@ -32,6 +32,17 @@ def test_normalize_digits():
     assert normalize_digits("25000.0") == "25000"
     assert normalize_digits("1,00,000.00") == "100000"
 
+
+def test_markdown_bold_and_table_pipes_do_not_break_matching():
+    # Part B renders bold names and small tables; the eval matcher (case-insensitive +
+    # digit-normalised substring) must be blind to the surrounding * / | characters.
+    assert text_contains("**25,000** Nm3/hr", "25000")
+    assert text_contains("| 25,000 Nm3/hr | recip |", "25000")
+    assert text_contains("The **MCH-16** is medium-duty", "mch-16")
+    # a must_not_contain guard still catches a forbidden needle inside bold / a table cell
+    assert text_contains("**Source:** Jyotech Catalog", "source:")
+    assert text_contains("| catalogue | link |", "catalogue")
+
 _HYDROGEN_ARGS = {
     "gas": "hydrogen",
     "capacity": 3000,
