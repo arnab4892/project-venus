@@ -38,6 +38,11 @@ because no real per-node signal existed. This pass adds an **optional, read-only
 Note: the graph has a single generic `agent` dispatch node (it routes internally via `wf.route`),
 so one static label there is correct — there is no per-agent node to label.
 
+Follow-up (typewriter pacing): the submit handler already yielded per TOKEN, but
+`harness.stream_turn`'s typewriter loop emitted with no delay, so the whole answer rendered in one
+paint. Added a `token_delay` (default 0.03 s, slept after each TOKEN) so Gradio repaints
+word-by-word; tests pass `token_delay=0` to stay fast (they assert ordering, not timing).
+
 **Tests:** `tests/runtime/test_on_stage_labels.py` (labels recorded in node order; default-None is
 inert) and two additions to `tests/apps/test_dev_ui_adapter.py` (the queue iterator's
 reusable-after-empty behaviour; the `stage_source` STATUS branch, previously untested).
