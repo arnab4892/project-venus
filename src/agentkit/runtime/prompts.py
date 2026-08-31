@@ -34,9 +34,37 @@ log = logging.getLogger(__name__)
 RUNTIME_AGENTS: dict[str, str] = {
     "triage": "triage",
     "application_discovery": "application_discovery",
+    "product_advisor": "product_advisor",
+    "documents_compliance": "documents_compliance",
+    "after_sales_intake": "after_sales_intake",
+    "commercial_routing": "commercial_routing",
     "faq_company": "faq_company",
     "deflect": "deflect",
 }
+
+# The customer-facing agents whose composed replies carry the advisor voice. The shared persona
+# block (`clients/<client>/prompts/_persona.md`) is prepended to each of these at load time — a
+# single source, so voice + presentation + Hinglish-register rules live in one file, not six.
+# triage (a JSON classifier) and deflect (a fixed scope statement) don't get the persona.
+PERSONA_AGENTS = frozenset(
+    {
+        "application_discovery",
+        "product_advisor",
+        "documents_compliance",
+        "after_sales_intake",
+        "commercial_routing",
+        "faq_company",
+    }
+)
+PERSONA_FILE = "_persona"
+
+
+def _persona_block(client: str) -> str:
+    """The shared persona block for a client, or ``""`` if none is present."""
+    try:
+        return load_prompt_file(client, PERSONA_FILE).strip()
+    except FileNotFoundError:
+        return ""
 
 
 def _active_release(conn: Connection) -> str | None:
@@ -93,9 +121,14 @@ def load_prompts(conn: Connection, client: str) -> list[dict]:
     does that. Returns ``[{prompt_id, agent, version}]`` for the rows written.
     """
     upsert_client(conn, client)
+    persona = _persona_block(client)
     written: list[dict] = []
     for agent, filename in RUNTIME_AGENTS.items():
         body = load_prompt_file(client, filename)
+        if persona and agent in PERSONA_AGENTS:
+            # Single-source include: the stored version = persona + agent-specific prompt, so the
+            # activated (golden-gated) version carries the voice without duplicating it per file.
+            body = f"{persona}\n\n{body}"
         version = _next_version(conn, client, agent)
         prompt_id = f"pv.{client}.{agent}.{version}"
         conn.execute(
@@ -145,22 +178,28 @@ def activate_prompt_gated(
     client: str,
     *,
     questions: list[dict] | None = None,
+    complete=None,
     embed=None,
     settings=None,
+    layers: tuple[str, ...] = ("fact", "retrieval", "e2e"),
 ):
     """Activate ``prompt_id`` only if the golden suite passes (LLD-EVAL-03).
 
-    Runs inside a SAVEPOINT: the activation is applied, the fact + retrieval layers of the
-    golden suite run against the active release, and **any fact/retrieval failure rolls the
-    activation back**. Returns ``(activated: bool, report)``. The tools read the
-    ``facts.active_*`` views, so this gates prompt activation exactly as ``release activate``
-    gates a release. ``questions`` is an injectable override for the gate test.
+    Runs inside a SAVEPOINT: the activation is applied, the golden suite runs against the active
+    release, and **any fact/retrieval/e2e failure rolls the activation back**. The e2e layer
+    runs only when ``complete`` (the runtime-LLM seam) is supplied — the live CLI passes it;
+    without it e2e is skipped and only fact/retrieval gate. Returns ``(activated: bool, report)``.
+    The tools read the ``facts.active_*`` views, so this gates prompt activation exactly as
+    ``release activate`` gates a release. ``questions`` is an injectable override for the gate test.
     """
     from agentkit.eval.runner import run_eval
 
     sp = conn.begin_nested()
     activate_prompt(conn, prompt_id)
-    report = run_eval(conn, client, questions=questions, embed=embed, settings=settings)
+    report = run_eval(
+        conn, client, questions=questions, complete=complete, embed=embed,
+        settings=settings, layers=layers,
+    )
     if report.ok:
         sp.commit()
         return True, report
@@ -191,4 +230,8 @@ def active_prompt(conn: Connection, client: str, agent: str) -> tuple[str, str |
         "the DB-versioned prompt.",
         client, agent, client, filename, client,
     )
-    return load_prompt_file(client, filename), None
+    body = load_prompt_file(client, filename)
+    persona = _persona_block(client)
+    if persona and agent in PERSONA_AGENTS:
+        body = f"{persona}\n\n{body}"
+    return body, None

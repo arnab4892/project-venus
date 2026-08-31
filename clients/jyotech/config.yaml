@@ -23,3 +23,8 @@ gas_aliases:
   co2: CO2
   carbon monoxide: CO
   co: CO
+  # Bio-gas is stored in several forms ("Bio Gas", "BioGas", "Purified Biogas"); canonicalise
+  # the query and the stored forms to one token so "biogas" matches "Bio Gas".
+  bio gas: biogas
+  biogas: biogas
+  purified biogas: biogas

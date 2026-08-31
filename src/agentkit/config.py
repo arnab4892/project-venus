@@ -37,6 +37,13 @@ class Settings(BaseSettings):
     llm_base_url: str = "http://llm.internal:8000/v1"
     llm_model: str = ""
 
+    # Auth for the runtime chat endpoint. `llm_api_key` is the bearer key; `llm_auth` toggles
+    # whether it is sent. Default True is backward-compatible — an empty key already resolves to
+    # the "not-needed" placeholder — so a no-auth endpoint is unaffected; set LLM_AUTH=false to
+    # force auth off even when a key is present.
+    llm_api_key: str = ""
+    llm_auth: bool = True
+
     # Runtime chat sampling knobs — each sent ONLY when set (same discipline as the
     # extractor knobs). qwen3 via Ollama accepts `temperature` (0 for determinism);
     # `reasoning_effort` is a free-string passthrough via extra_body; `max_completion_tokens`
@@ -48,6 +55,13 @@ class Settings(BaseSettings):
     # Embedding endpoint — OpenAI-compatible, self-hosted
     embed_base_url: str = "http://embed.internal:8001/v1"
     embed_model: str = "bge-m3"
+
+    # Auth for the embedding endpoint (independent of the chat LLM auth). `embed_api_key` is the
+    # bearer key; `embed_auth` toggles whether it is sent. Default True is backward-compatible — an
+    # empty key resolves to the "not-needed" placeholder — so a no-auth endpoint is unaffected; set
+    # EMBED_AUTH=false to force auth off even when a key is present.
+    embed_api_key: str = ""
+    embed_auth: bool = True
 
     # Embedding tokenizer + limits (LLD-RET-02). `embed_tokenizer` is a HF repo id
     # (resolved from the local cache) or `embed_tokenizer_path` a local tokenizer.json

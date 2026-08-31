@@ -373,17 +373,30 @@ def release_embed_cmd(
 @eval_app.command("run")
 def eval_run_cmd(
     client: str = typer.Argument(..., help="Client id, e.g. jyotech."),
+    layers: str = typer.Option(
+        "fact,retrieval,e2e", "--layers",
+        help="Comma-separated layers to run. Drop 'e2e' for a fast dev run (no runtime LLM).",
+    ),
 ) -> None:
-    """Run the golden suite (fact + retrieval layers) against the active release (LLD-EVAL-02).
+    """Run the golden suite against the active release (LLD-EVAL-02/03).
 
-    The e2e layer is reported 'pending' (needs agents, milestone 5). Exits non-zero if any
-    fact or retrieval check fails.
+    Runs all three layers by default: fact, retrieval and **e2e** (each question through the
+    real orchestrator + self-hosted runtime LLM). The full e2e pass can be slow — that's
+    acceptable for an activation gate; use `--layers fact,retrieval` to skip it explicitly.
+    Exits non-zero if any executed check fails.
     """
     from agentkit.db.engine import connect
     from agentkit.eval.runner import format_report, run_eval
 
+    layer_tuple = tuple(s.strip() for s in layers.split(",") if s.strip())
+    complete = None
+    if "e2e" in layer_tuple:
+        from agentkit.runtime.llm import build_runtime_client
+
+        complete = build_runtime_client().complete_fn()
+
     with connect() as conn:
-        report = run_eval(conn, client)
+        report = run_eval(conn, client, complete=complete, layers=layer_tuple)
     typer.echo(format_report(report))
     if not report.ok:
         raise typer.Exit(code=1)
@@ -430,22 +443,24 @@ def release_activate_cmd(
 ) -> None:
     """Make a release the single active one, gated by the golden suite (LLD-REL-05/EVAL-03).
 
-    Activation and the golden run share one transaction: the release is flipped active, the
-    fact + retrieval layers run against it, and a fact/retrieval failure rolls the activation
-    back (LLD-EVAL-03). The e2e layer is pending agents (milestone 5), so it never blocks; an
-    unreachable embedder degrades the retrieval layer to 'not evaluated', never a failure.
+    Activation and the golden run share one transaction: the release is flipped active, all
+    three layers (fact + retrieval + **e2e**, the last through the real orchestrator + runtime
+    LLM) run against it, and any failure rolls the activation back (LLD-EVAL-03). An unreachable
+    embedder degrades the retrieval layer to 'not evaluated', never a failure.
     """
     from agentkit.db.engine import connect
     from agentkit.eval.runner import format_report, run_eval
     from agentkit.ingest.sources import autodetect_client
     from agentkit.release.promote import activate
+    from agentkit.runtime.llm import build_runtime_client
 
     client = autodetect_client()
+    complete = build_runtime_client().complete_fn()
     with connect() as conn:
         trans = conn.begin()
         try:
             activate(conn, release_id)
-            report = run_eval(conn, client)
+            report = run_eval(conn, client, complete=complete)
         except Exception:
             trans.rollback()
             raise
@@ -455,7 +470,7 @@ def release_activate_cmd(
             typer.echo(f"\nGolden suite FAILED — {release_id} NOT activated (LLD-EVAL-03).")
             raise typer.Exit(code=1)
         trans.commit()
-    typer.echo(f"Activated {release_id}. Golden suite passed (fact + retrieval; e2e pending).")
+    typer.echo(f"Activated {release_id}. Golden suite passed (fact + retrieval + e2e).")
 
 
 @release_app.command("rollback")
@@ -500,12 +515,17 @@ def prompt_load_cmd(
 @prompt_app.command("activate")
 def prompt_activate_cmd(
     prompt_id: str = typer.Argument(..., help="Prompt version id, e.g. pv.jyotech.triage.1."),
+    layers: str = typer.Option(
+        "fact,retrieval,e2e", "--layers",
+        help="Golden layers to gate on. Drop 'e2e' for a fast bring-up (no runtime LLM per turn).",
+    ),
 ) -> None:
     """Activate a prompt version, gated by the golden suite (LLD-EVAL-03).
 
-    The activation and the fact + retrieval layers share one transaction: a fact/retrieval
-    failure rolls the activation back and the prompt stays inactive, exactly like
-    `release activate`.
+    The activation and the golden run share one transaction: any fact/retrieval/e2e failure
+    rolls the activation back and the prompt stays inactive, exactly like `release activate`.
+    The full e2e pass is slow (one live-LLM turn per question) — `--layers fact,retrieval`
+    gates without it for a fast bring-up, after which `agentkit eval run` proves all three.
     """
     from sqlalchemy import text as _text
 
@@ -513,6 +533,12 @@ def prompt_activate_cmd(
     from agentkit.eval.runner import format_report
     from agentkit.runtime.prompts import activate_prompt_gated
 
+    layer_tuple = tuple(s.strip() for s in layers.split(",") if s.strip())
+    complete = None
+    if "e2e" in layer_tuple:
+        from agentkit.runtime.llm import build_runtime_client
+
+        complete = build_runtime_client().complete_fn()
     with connect() as conn:
         trans = conn.begin()
         try:
@@ -522,7 +548,9 @@ def prompt_activate_cmd(
             ).scalar_one_or_none()
             if client is None:
                 raise typer.BadParameter(f"unknown prompt_id {prompt_id!r}")
-            activated, report = activate_prompt_gated(conn, prompt_id, client)
+            activated, report = activate_prompt_gated(
+                conn, prompt_id, client, complete=complete, layers=layer_tuple
+            )
         except Exception:
             trans.rollback()
             raise
@@ -532,7 +560,7 @@ def prompt_activate_cmd(
             typer.echo(f"\nGolden suite FAILED — {prompt_id} NOT activated (LLD-EVAL-03).")
             raise typer.Exit(code=1)
         trans.commit()
-    typer.echo(f"Activated {prompt_id}. Golden suite passed (fact + retrieval; e2e pending).")
+    typer.echo(f"Activated {prompt_id}. Golden suite passed ({'+'.join(layer_tuple)}).")
 
 
 @app.command("chat")
@@ -598,7 +626,13 @@ def chat_cmd(
                 history = rebuild_context(conn, sid)
                 result = run_turn(ctx, sid, user, history=history)
             for m in result.messages:
-                typer.echo(f"bot › {m['text']}")
+                if m.get("kind") == "document_card":
+                    pl = m.get("payload") or {}
+                    typer.echo(
+                        f"bot › 📄 {pl.get('title')}  {pl.get('locator') or ''}  {pl.get('url') or ''}".rstrip()
+                    )
+                else:
+                    typer.echo(f"bot › {m['text']}")
             for c in result.citations:
                 loc = c.get("locator") or ""
                 url = c.get("url") or ""

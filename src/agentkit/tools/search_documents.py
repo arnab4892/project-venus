@@ -98,7 +98,7 @@ def search_documents(
         return {"chunks": []}
 
     detail_sql = (
-        "SELECT c.chunk_id, c.doc_id, c.locator, c.content_md, c.family_ids, d.url "
+        "SELECT c.chunk_id, c.doc_id, c.locator, c.content_md, c.family_ids, d.url, d.title "
         "FROM facts.chunk c JOIN facts.active_document d ON d.doc_id = c.doc_id "
         "WHERE c.release_id = :rid AND c.chunk_id = ANY(:ids)"
     )
@@ -112,6 +112,7 @@ def search_documents(
         {
             "chunk_id": cid,
             "doc_id": details[cid]["doc_id"],
+            "title": details[cid]["title"],
             "locator": details[cid]["locator"],
             "url": details[cid]["url"],
             "content_md": details[cid]["content_md"],

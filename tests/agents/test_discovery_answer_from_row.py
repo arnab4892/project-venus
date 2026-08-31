@@ -107,8 +107,9 @@ def test_answers_from_top_match_and_retrieves_that_family_only():
     assert query == "Process Compressors (Recip.) hydrogen"
     assert kw["family_ids"] == ["fam.process_recip"]
 
-    # the compose step was handed the ROW's own published limits (25000 / 1000), not a chunk's
-    assert "25000" in llm.answer_system
+    # the compose step was handed the ROW's own published limits, formatted for prose (25,000 /
+    # 1000 — Indian grouping ≥10,000), not a chunk's figures
+    assert "25,000" in llm.answer_system
     assert "1000" in llm.answer_system
     assert "Process Compressors (Recip.)" in llm.answer_system
 

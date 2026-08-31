@@ -38,6 +38,19 @@ def test_runtime_client_never_borrows_the_extractor_endpoint() -> None:
     assert client.model != settings.extract_llm_model
 
 
+def test_runtime_auth_key_sent_when_auth_on_and_omitted_when_off() -> None:
+    # LLM_AUTH=true → the bearer key is wired into the client; LLM_AUTH=false force-disables auth
+    # even with a key present, leaving the "not-needed" placeholder path in _openai().
+    on = build_runtime_client(_settings(llm_auth=True, llm_api_key="sk-vllm-123"))
+    assert on.api_key == "sk-vllm-123"
+
+    off = build_runtime_client(_settings(llm_auth=False, llm_api_key="sk-vllm-123"))
+    assert off.api_key == ""
+
+    # backward-compatible default: no key set → nothing to send (placeholder used downstream)
+    assert build_runtime_client(_settings()).api_key == ""
+
+
 def test_runtime_sampling_knobs_flow_from_settings() -> None:
     client = build_runtime_client(_settings(llm_temperature=0.0, llm_reasoning_effort="low"))
     assert client.temperature == 0.0

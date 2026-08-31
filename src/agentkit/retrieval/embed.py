@@ -51,6 +51,7 @@ class EmbeddingClient:
     model: str
     dim: int
     num_ctx: int
+    api_key: str = ""
 
     def raw_embed(self, texts: Sequence[str]) -> list[list[float]]:  # pragma: no cover
         """Embed a batch, sending the provider context window explicitly (num_ctx)."""
@@ -64,7 +65,7 @@ class EmbeddingClient:
     def _client(self):  # pragma: no cover - constructs the real SDK client lazily
         from openai import OpenAI
 
-        return OpenAI(base_url=self.base_url, api_key="not-needed")
+        return OpenAI(base_url=self.base_url, api_key=self.api_key or "not-needed")
 
 
 def client_from_settings(settings: Settings | None = None) -> EmbeddingClient:
@@ -75,6 +76,9 @@ def client_from_settings(settings: Settings | None = None) -> EmbeddingClient:
         model=settings.embed_model,
         dim=settings.embed_dim,
         num_ctx=settings.embed_num_ctx,
+        # Send the bearer key only when auth is on; off (or no key) keeps the "not-needed"
+        # placeholder in _client(), so a no-auth endpoint still works.
+        api_key=settings.embed_api_key if settings.embed_auth else "",
     )
 
 

@@ -92,3 +92,70 @@ def test_calls_match_capability_when_slots_complete(seeded_conn, make_ctx, new_s
     result = run_turn(ctx, sid, "hydrogen, 3000 Nm3/hr, 350 bar, oil-free")
     assert result.outcome == "answered"
     assert "match_capability" in _tool_names(seeded_conn, sid)
+
+
+def _parroted_slot_fake() -> FakeLLM:
+    # asked_slot whose QUESTION parrots published figures (25,000 / 1,000) from the exemplar,
+    # with no tool call this turn — the gate-bypass shape (turn 271ff0e2).
+    return FakeLLM(
+        {
+            "triage": {
+                "division": "industrial", "intent": "application_enquiry", "language": "en",
+                "in_scope": True, "pii_present": False, "confidence": 0.9,
+            },
+            "application_slots": {
+                "gas": "natural gas", "capacity": None, "capacity_unit": None, "discharge_p": None,
+                "lubricated": None, "standard": None, "industry": None, "timeline": None,
+                "asked_slot": "capacity",
+                "message": "Sure — our process range goes up to 25,000 Nm³/hr and 1,000 barg. "
+                           "What flow do you need?",
+            },
+        }
+    )
+
+
+def test_gate_strips_unsourced_figures_from_a_slot_question(seeded_conn, make_ctx, new_session):
+    # A slot question is an answer in disguise if it carries published figures that never came
+    # from a tool call or the user — the numeric guard strips them regardless of the asked_slot
+    # outcome (LLD-RT-05, every message).
+    ctx = make_ctx(_parroted_slot_fake())
+    sid = new_session()
+    result = run_turn(ctx, sid, "I need something for natural gas")  # no flow/pressure given
+
+    assert result.outcome == "asked_slot"
+    assert _tool_names(seeded_conn, sid) == []  # no match_capability this turn
+    text = result.messages[0]["text"]
+    assert "25,000" not in text and "25000" not in text
+    assert "1,000 barg" not in text
+    assert result.grounding and 25000.0 in result.grounding["stripped_unsourced_numbers"]
+
+
+def _underextracted_then_complete_fake() -> FakeLLM:
+    # The slot LLM first UNDER-extracts a complete duty (asks for capacity), then the enforced
+    # re-extraction returns the full duty → match_capability must run.
+    return FakeLLM(
+        {
+            "triage": {
+                "division": "industrial", "intent": "application_enquiry", "language": "en",
+                "in_scope": True, "pii_present": False, "confidence": 0.95,
+            },
+            "application_slots": [
+                {"gas": "natural gas", "capacity": None, "capacity_unit": None, "discharge_p": None,
+                 "lubricated": None, "standard": None, "industry": None, "timeline": None,
+                 "asked_slot": "capacity", "message": "What flow do you need?"},
+                {"gas": "natural gas", "capacity": 50000, "capacity_unit": "SCMD", "discharge_p": 120,
+                 "lubricated": None, "standard": None, "industry": None, "timeline": None,
+                 "asked_slot": None, "message": ""},
+            ],
+            "answer": {"message": "That natural gas duty fits our range [tr1].", "citations": ["tr1"]},
+        }
+    )
+
+
+def test_complete_duty_forces_match_even_when_slot_llm_underextracts(seeded_conn, make_ctx, new_session):
+    ctx = make_ctx(_underextracted_then_complete_fake())
+    sid = new_session()
+    result = run_turn(ctx, sid, "natural gas, 50000 SCMD, 120 bar")
+
+    assert result.outcome == "answered"  # not asked_slot — the duty was complete
+    assert "match_capability" in _tool_names(seeded_conn, sid)

@@ -7,14 +7,28 @@ Return JSON with exactly these fields:
 
 - `division` — one of `industrial`, `fire_rescue`, `diving`, or `unknown` if unclear.
 - `intent` — exactly one of:
-  - `application_enquiry` — wants a compressor/equipment for a duty (gas, flow, pressure,
-    plant type), or an RFQ for such a duty. Industrial application matching.
-  - `product_question` — asks about a named model / kit / variant (e.g. MCH-16, EOLO 330).
-  - `documents` — wants a catalogue, datasheet, certificate or company document.
+  - `application_enquiry` — wants a compressor matched to a **specific duty**: the visitor
+    gives a flow/capacity **and** a pressure (optionally a gas/plant type) to size against, or
+    asks for an RFQ for such a duty. If there is no specific flow-and-pressure duty to match, it
+    is NOT an application_enquiry.
+  - `product_question` — asks about a named model / kit / variant (e.g. MCH-16, EOLO 330) or
+    about a **product family / what you offer** ("tell me about your hydrogen fuelling systems",
+    "do you make air separation plants", "fill containment cabinets") — even when a gas is named,
+    if there is no specific flow-and-pressure duty, it is a product_question, not an application.
+  - `documents` — wants a catalogue, datasheet, certificate or company document, **or asks whether
+    a MACHINE / PRODUCT meets a design or compliance standard** — API-618/API-11P, ASME, PED, ATEX,
+    ISO 13631, IS/EN/BS standards, or "is your compressor/machine compliant/certified to <standard>".
+    These are answered from the product catalogues, so they route here, not to `faq`.
   - `after_sales` — service, spares, AMC, or help with a machine they already own.
-  - `commercial` — price, lead time, dealer/distributor, or export enquiry.
-  - `faq` — company facts (certifications, founding, offices, coverage, industries served),
-    careers, or general questions about Jyotech.
+  - `commercial` — price, lead time, or a dealer/distributor/export **partnership** ("we want to
+    distribute your products", "become an export partner"). This is about a commercial deal.
+  - `faq` — **company-level** facts: the COMPANY's certifications (ISO 9001/14001/45001, company
+    accreditations), founding/founder, offices, geographic coverage, industries served; careers; or
+    general questions about Jyotech. Note the split: a MACHINE/product compliance standard (API-618,
+    ASME, …) is `documents`, but the company holding ISO 9001 is `faq`. A question asking **whether
+    Jyotech serves / supplies / exports to a place** ("do you export to the Middle East?", "do you
+    serve Nepal?") is a coverage question — `faq`, NOT commercial. When a message asks several
+    things (e.g. "who founded you and do you export to X?"), pick the company-info intent (`faq`).
   - `out_of_scope` — anything unrelated to Jyotech, its products or its business (weather,
     jokes, poems, general knowledge).
 - `language` — the visitor's language: `en`, `hi` (Hindi), or `hinglish` (romanised

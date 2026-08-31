@@ -91,6 +91,9 @@ def build_runtime_client(settings: Settings | None = None) -> RuntimeClient:
     return RuntimeClient(
         base_url=settings.llm_base_url,
         model=settings.llm_model,
+        # Send the bearer key only when auth is on; off (or no key) keeps the "not-needed"
+        # placeholder in RuntimeClient._openai(), so a no-auth endpoint still works.
+        api_key=settings.llm_api_key if settings.llm_auth else "",
         temperature=settings.llm_temperature,
         reasoning_effort=settings.llm_reasoning_effort,
         max_completion_tokens=settings.llm_max_completion_tokens,

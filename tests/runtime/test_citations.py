@@ -79,7 +79,9 @@ def test_company_fact_citation_has_locator():
 
 
 def test_only_cited_results_become_citations():
-    # cite only tr1 though two records are present → tr2's fact is NOT cited.
+    # cite only tr1 though two records are present → tr2's fact is NOT cited. The cited chunk
+    # also yields its parent document (honest parent-derivation), but the uncited fact never
+    # leaks in.
     gr = ground_answer(
         "Process gas range covers it [tr1].",
         ["tr1"],
@@ -87,4 +89,7 @@ def test_only_cited_results_become_citations():
         ["hydrogen duty"],
     )
     kinds = {c.kind for c in gr.citations}
-    assert kinds == {"chunk"}
+    assert kinds == {"chunk", "document"}  # chunk + its parent doc, never the uncited fact
+    assert "fact" not in kinds
+    doc_cite = [c for c in gr.citations if c.kind == "document"][0]
+    assert doc_cite.ref_id == "doc.process"

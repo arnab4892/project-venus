@@ -81,5 +81,55 @@ DEFLECT_SCHEMA: dict = {
     "required": ["message"],
 }
 
+# After-sales intake slots (LLD-AG-04). Flat, echo-only like APPLICATION_SCHEMA: a slot the
+# visitor has not yet stated is null; `asked_slot` names the single slot to ask for this turn.
+AFTER_SALES_SCHEMA: dict = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "model": _STR_OR_NULL,
+        "serial_or_year": _STR_OR_NULL,
+        "site_city": _STR_OR_NULL,
+        "need": _STR_OR_NULL,
+        "contact_pref": _STR_OR_NULL,
+        "contact_detail": _STR_OR_NULL,
+        "asked_slot": _STR_OR_NULL,
+        "message": {"type": "string"},
+    },
+    "required": [
+        "model", "serial_or_year", "site_city", "need", "contact_pref", "contact_detail",
+        "asked_slot", "message",
+    ],
+}
+
+# The after-sales slots, in the order they are collected (one question per turn, LLD-AG-04).
+# contact_detail (the actual email/phone) is collected AFTER contact_pref so the handoff carries
+# everything M6 needs.
+AFTER_SALES_SLOTS = ["model", "serial_or_year", "site_city", "need", "contact_pref", "contact_detail"]
+
+# Product-advisor intent parse (LLD-AG-02). `model_or_family` is the model/kit/family the
+# visitor named (null if they asked generally); `is_price_or_leadtime` flags a commercial ask
+# that must route to handoff, never an answer; `search_query` is an English retrieval phrase.
+PRODUCT_QUERY_SCHEMA: dict = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "model_or_family": _STR_OR_NULL,
+        "is_price_or_leadtime": {"type": "boolean"},
+        "search_query": {"type": "string"},
+    },
+    "required": ["model_or_family", "is_price_or_leadtime", "search_query"],
+}
+
+# Query translation (LLD-RT-07): retrieval stays English, so a Hindi/Hinglish free-text query
+# is translated to an English search phrase before search_documents. Tool args + citations
+# are unaffected; only the retrieval query is translated.
+TRANSLATE_SCHEMA: dict = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {"query_en": {"type": "string"}},
+    "required": ["query_en"],
+}
+
 # The three application slots that must be present before match_capability runs, in ask order.
 REQUIRED_SLOTS = ["gas", "capacity", "discharge_p"]
