@@ -22,8 +22,20 @@ from sqlalchemy import Connection
 
 from agentkit.config import Settings, get_settings
 from agentkit.extract.llm import ExtractionSkipped
-from agentkit.runtime.agents import application_discovery, deflect, faq_company
-from agentkit.runtime.grounding import ground_answer
+from agentkit.runtime.agents import (
+    after_sales_intake,
+    application_discovery,
+    commercial_routing,
+    deflect,
+    documents_compliance,
+    faq_company,
+    product_advisor,
+)
+from agentkit.runtime.grounding import (
+    ground_answer,
+    numeric_universe,
+    redact_unsourced_spec_numbers,
+)
 from agentkit.runtime.ops import (
     CitationRecord,
     InvocationRecord,
@@ -59,6 +71,10 @@ _TRIAGE_FALLBACK = {
 
 _AGENTS: dict[str, Callable] = {
     "application_discovery": application_discovery.run,
+    "product_advisor": product_advisor.run,
+    "documents_compliance": documents_compliance.run,
+    "after_sales_intake": after_sales_intake.run,
+    "commercial_routing": commercial_routing.run,
     "faq_company": faq_company.run,
     "deflect": deflect.run,
 }
@@ -99,6 +115,17 @@ class _GState(TypedDict):
     wf: WorkflowState
 
 
+# Triage intent → agent route (LLD-RT-03/04, LLD-AG-01..06). deflect is out-of-scope only.
+_INTENT_ROUTE: dict[str, str] = {
+    "application_enquiry": "application_discovery",
+    "product_question": "product_advisor",
+    "documents": "documents_compliance",
+    "after_sales": "after_sales_intake",
+    "commercial": "commercial_routing",
+    "faq": "faq_company",
+}
+
+
 def decide_route(triage: dict) -> tuple[str, str | None]:
     """Return ``(route, forced_outcome)`` for a triage result (LLD-RT-03/04)."""
     if needs_clarification(triage):
@@ -106,12 +133,11 @@ def decide_route(triage: dict) -> tuple[str, str | None]:
     intent = triage["intent"]
     if not triage["in_scope"] or intent == "out_of_scope":
         return "deflect", "declined_oos"
-    if intent == "application_enquiry":
-        return "application_discovery", None
-    if intent in ("faq", "documents"):
-        return "faq_company", None
-    # product_question / after_sales / commercial: full agents land in 5b — hold politely.
-    return "deflect", "deflected"
+    # All six in-scope intents land on their own agent (5b); deflect is only out-of-scope.
+    route = _INTENT_ROUTE.get(intent)
+    if route is not None:
+        return route, None
+    return "deflect", "declined_oos"
 
 
 def _user_texts(history: list[dict], latest_user: str) -> list[str]:
@@ -210,27 +236,46 @@ def n_agent(state: _GState) -> dict:
 def n_ground(state: _GState) -> dict:
     wf = state["wf"]
     out = wf.agent_out
-    if out is None:  # clarify path already produced its message
-        return {}
 
-    if out.action == "answer":
-        gr = ground_answer(
-            out.draft_text,
-            out.citations,
-            wf.tool_records,
-            _user_texts(wf.history, wf.latest_user),
-        )
-        wf.reply_messages = [MessageRecord("assistant", "text", gr.text)]
-        wf.citations = gr.citations
-        wf.grounding = gr.grounding
-        wf.outcome = "answered"
-    else:
-        wf.reply_messages = out.messages
-        wf.outcome = {
-            "ask_slot": "asked_slot",
-            "handoff": "handoff",
-            "deflect": wf.forced_outcome or "declined_oos",
-        }.get(out.action, "answered")
+    if out is not None:
+        if out.action == "answer":
+            gr = ground_answer(
+                out.draft_text,
+                out.citations,
+                wf.tool_records,
+                _user_texts(wf.history, wf.latest_user),
+            )
+            wf.reply_messages = [MessageRecord("assistant", "text", gr.text)]
+            # Structured extras (e.g. a document_card) ride along only when grounding passed —
+            # a failed answer ships the fallback text alone (LLD-AG-03).
+            if gr.ok and out.extra_messages:
+                wf.reply_messages.extend(out.extra_messages)
+            wf.citations = gr.citations
+            wf.grounding = gr.grounding
+            wf.outcome = "answered"
+        else:
+            wf.reply_messages = out.messages
+            wf.outcome = {
+                "ask_slot": "asked_slot",
+                "handoff": "handoff",
+                "deflect": wf.forced_outcome or "declined_oos",
+            }.get(out.action, "answered")
+
+    # The numeric guard applies to EVERY outgoing message, whatever the action (LLD-RT-05): a
+    # spec figure that is neither in this turn's tool results nor in the visitor's own message is
+    # a fabrication (e.g. published limits parroted into a slot question from a prompt exemplar).
+    # A pure slot question needs no citation, but a slot question carrying such a figure is an
+    # answer in disguise and the figure is stripped exactly as it would be from an answer.
+    allowed = numeric_universe(wf.tool_records, _user_texts(wf.history, wf.latest_user))
+    stripped_all: list[float] = []
+    for m in wf.reply_messages:
+        if m.kind == "text" and m.text:
+            clean, stripped = redact_unsourced_spec_numbers(m.text, allowed)
+            if stripped:
+                m.text = clean
+                stripped_all.extend(stripped)
+    if stripped_all:
+        wf.grounding = {**(wf.grounding or {}), "stripped_unsourced_numbers": sorted(set(stripped_all))}
     return {}
 
 
@@ -286,9 +331,11 @@ class RunResult:
     outcome: str | None
     route: str | None
     grounding: dict | None
-    messages: list[dict]  # assistant bubbles for display: [{role, kind, text}]
+    messages: list[dict]  # assistant bubbles for display: [{role, kind, text, payload}]
     citations: list[dict]  # [{kind, ref_id, locator, url}]
     invocations: list[dict]  # for --show-trace
+    tool_results: list[dict] = field(default_factory=list)  # each tool's raw result (eval/guard)
+    tool_args: list[dict] = field(default_factory=list)  # each tool's args (allowed-number set)
 
 
 def run_turn(ctx: Ctx, session_id, latest_user: str, *, history: list[dict] | None = None) -> RunResult:
@@ -313,10 +360,15 @@ def run_turn(ctx: Ctx, session_id, latest_user: str, *, history: list[dict] | No
         outcome=wf.outcome,
         route=wf.route,
         grounding=wf.grounding,
-        messages=[{"role": m.role, "kind": m.kind, "text": m.text} for m in wf.reply_messages],
+        messages=[
+            {"role": m.role, "kind": m.kind, "text": m.text, "payload": m.payload}
+            for m in wf.reply_messages
+        ],
         citations=[
             {"kind": c.kind, "ref_id": c.ref_id, "locator": c.locator, "url": c.url}
             for c in wf.citations
         ],
         invocations=inv_trace,
+        tool_results=[rec.result for rec in wf.tool_records],
+        tool_args=[rec.args for rec in wf.tool_records],
     )

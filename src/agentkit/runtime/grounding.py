@@ -26,8 +26,9 @@ from dataclasses import dataclass, field
 from agentkit.runtime.ops import CitationRecord, ToolCallRecord
 
 FALLBACK_TEXT = (
-    "I don't have that in our published material. I can connect you with our engineers "
-    "who can help with the specifics — would you like me to do that?"
+    "I want to make sure I only give you figures we actually publish, and I don't have that "
+    "one in front of me. Let me put you with our engineers who can confirm the exact details — "
+    "shall I?"
 )
 
 # Units that mark a number as a *spec* (capacity / pressure / measure). Longer tokens first.
@@ -54,35 +55,131 @@ def _spec_numbers(text: str) -> set[float]:
     return {_to_float(m.group(1)) for m in _SPEC_RE.finditer(cleaned)}
 
 
-def _citations_from_record(rec: ToolCallRecord) -> list[CitationRecord]:
-    """Map a cited tool result to its citation rows (locator/url where published)."""
+def spec_numbers(text: str) -> set[float]:
+    """Public: the *spec* numbers (adjacent to a capacity/pressure/measure unit) in ``text``."""
+    return _spec_numbers(text)
+
+
+def numeric_universe(tool_records, user_texts) -> set[float]:
+    """Every number the reply is allowed to contain: tool results/args + the visitor's own text."""
+    allowed: set[float] = set()
+    for rec in tool_records:
+        allowed |= _all_numbers(json.dumps(rec.result, default=str))
+        allowed |= _all_numbers(json.dumps(rec.args, default=str))
+    for t in user_texts:
+        allowed |= _all_numbers(t or "")
+    return allowed
+
+
+def redact_unsourced_spec_numbers(text: str, allowed: set[float]) -> tuple[str, list[float]]:
+    """Strip any *spec* figure not in ``allowed`` from ``text`` (LLD-RT-05, every message).
+
+    A number adjacent to a capacity/pressure/measure unit that is neither in this turn's tool
+    results nor in the visitor's own message is a fabrication (typically parroted from a prompt
+    exemplar) — it is replaced with an ellipsis, wherever it appears and whatever the action.
+    Returns ``(clean_text, stripped_numbers)``.
+    """
+    stripped: list[float] = []
+
+    def _repl(m: re.Match) -> str:
+        num = _to_float(m.group(1))
+        if num in allowed:
+            return m.group(0)
+        stripped.append(num)
+        return "…"
+
+    cleaned = _SPEC_RE.sub(_repl, _CITATION_MARKER_RE.sub(" ", text or ""))
+    return cleaned, stripped
+
+
+def all_numbers(text: str) -> set[float]:
+    """Public: every number in ``text``."""
+    return _all_numbers(text)
+
+
+_TOKEN_RE = re.compile(r"[a-z]{5,}|api[\s\-]?\d+|\d[\d,\.]*")
+
+
+def _best_chunk(chunks: list[dict], answer_text: str | None) -> dict:
+    """The retrieved chunk the answer actually drew from — not blindly the top RRF hit.
+
+    Hybrid ranking can float an off-topic chunk to #1 while the answer is composed from a
+    lower-ranked one (e.g. an API-618 question whose top hit is a PPV-blower page, but whose
+    answer comes from the process catalogue at rank 2). Pick the chunk sharing the most
+    distinctive tokens with the answer; on a tie or no answer text, keep the top hit.
+    """
+    if answer_text is None or len(chunks) == 1:
+        return chunks[0]
+    low = answer_text.lower().replace(",", "")
+    ans = {t.replace(",", "") for t in _TOKEN_RE.findall(low)}
+
+    def _overlap(c: dict) -> int:
+        toks = {t.replace(",", "") for t in _TOKEN_RE.findall((c.get("content_md") or "").lower())}
+        return len(toks & ans)
+
+    best = max(range(len(chunks)), key=lambda i: (_overlap(chunks[i]), -i))
+    return chunks[best] if _overlap(chunks[best]) > 0 else chunks[0]
+
+
+def _value_used(value, answer_text: str | None) -> bool:
+    """True if a company-fact value is actually reflected in the answer (citation hygiene).
+
+    ``get_company_fact(kind)`` can return many rows (e.g. six 'founded' years); only the rows the
+    answer actually used should be cited. A row counts as used if any of its ≥4-char words or its
+    numbers appear in the answer. ``answer_text=None`` keeps everything (direct unit-test callers).
+    """
+    if answer_text is None:
+        return True
+    low = answer_text.lower()
+    tokens = re.findall(r"[a-z]{4,}|\d[\d,]*", str(value or "").lower())
+    return any(t.replace(",", "") in low.replace(",", "") for t in tokens)
+
+
+def _citations_from_record(rec: ToolCallRecord, answer_text: str | None = None) -> list[CitationRecord]:
+    """Map a cited tool result to its citation rows (locator/url where published).
+
+    Citations include the cited result **and its honest parent** — a matched capability row's
+    family, a cited chunk's source document — so a golden/e2e expectation can be pinned by the
+    stable document/family id, not only a renumbering chunk id. This is parent-derivation of a
+    *cited* result, never speculative attachment of an unused source.
+    """
     out: list[CitationRecord] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(kind: str, ref_id, *, locator=None, url=None) -> None:
+        if not ref_id or (kind, ref_id) in seen:
+            return
+        seen.add((kind, ref_id))
+        out.append(CitationRecord(kind=kind, ref_id=ref_id, locator=locator, url=url))
+
     r = rec.result
     if rec.tool == "match_capability":
         for m in r.get("matches", []):
-            out.append(CitationRecord(kind="capability", ref_id=m["cap_id"]))
+            add("capability", m["cap_id"])
+            add("family", m.get("family_id"))  # parent family of the matched row
     elif rec.tool == "search_documents":
         chunks = r.get("chunks", [])
         if chunks:
-            c = chunks[0]  # cite the top hit
-            out.append(
-                CitationRecord(kind="chunk", ref_id=c["chunk_id"], locator=c.get("locator"), url=c.get("url"))
-            )
+            c = _best_chunk(chunks, answer_text)  # the chunk the answer used, not just the top hit
+            add("chunk", c["chunk_id"], locator=c.get("locator"), url=c.get("url"))
+            add("document", c.get("doc_id"), locator=c.get("locator"), url=c.get("url"))
     elif rec.tool == "get_company_fact":
-        for f in r.get("facts", []):
-            out.append(
-                CitationRecord(kind="fact", ref_id=f["fact_id"], locator=f.get("source_locator"))
-            )
+        used = [f for f in r.get("facts", []) if _value_used(f.get("value"), answer_text)]
+        # If none obviously matched (paraphrase), fall back to citing all — never zero the source.
+        for f in (used or r.get("facts", [])):
+            add("fact", f["fact_id"], locator=f.get("source_locator"))
+            add("document", f.get("source_doc_id"), locator=f.get("source_locator"))  # its source
     elif rec.tool in ("get_product", "list_products"):
         for p in r.get("products", []):
-            out.append(
-                CitationRecord(kind="product", ref_id=p.get("product_id") or p.get("family_id"),
-                               locator=p.get("source_locator"))
-            )
+            add("product", p.get("product_id"), locator=p.get("source_locator"))
+            add("family", p.get("family_id"))  # parent family of the product
+            add("document", p.get("source_doc_id"), locator=p.get("source_locator"))  # its source doc
+        for fam in r.get("families", []):  # list_products groups by family
+            add("family", fam.get("family_id"))
     elif rec.tool == "get_office":
         office = r.get("office")
         if office:
-            out.append(CitationRecord(kind="office", ref_id=office["office_id"]))
+            add("office", office["office_id"])
     return out
 
 
@@ -126,7 +223,7 @@ def ground_answer(
     if ok:
         citations: list[CitationRecord] = []
         for tid in cited:
-            citations.extend(_citations_from_record(by_id[tid]))
+            citations.extend(_citations_from_record(by_id[tid], answer_text))
         return GroundingResult(
             ok=True,
             text=answer_text,

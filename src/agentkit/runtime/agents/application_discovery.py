@@ -17,8 +17,11 @@ demo seed has no chunks) the agent answers from the capability match alone, neve
 
 from __future__ import annotations
 
+import re
+
 from agentkit.extract.llm import call_json
 from agentkit.runtime.agents.base import AgentOutput, compose_grounded_answer
+from agentkit.runtime.format import format_number
 from agentkit.runtime.language import respond_in
 from agentkit.runtime.ops import MessageRecord
 from agentkit.runtime.schemas import APPLICATION_SCHEMA
@@ -29,6 +32,25 @@ _SLOT_QUESTIONS = {
     "capacity": "What flow/capacity do you need, with units (e.g. Nm³/hr, SCMD or kg/hr)?",
     "discharge_p": "What discharge pressure do you need (in bar)?",
 }
+
+# Regexes to detect that the message ALREADY states a flow-with-units and a pressure — used to
+# catch the slot LLM under-extracting a complete duty (structural slot-complete rule, LLD-AG-01).
+_CAP_RE = re.compile(
+    r"\d[\d,\.]*\s*(?:n\s*m\s*3\s*/?\s*hr?|nm³|scmd|scmh|kg\s*/\s*hr|m3\s*/\s*hr|m³/\s*hr|lpm|cfm|tpd)",
+    re.IGNORECASE,
+)
+_PRES_RE = re.compile(r"\d[\d,\.]*\s*(?:barg|bar|psi)", re.IGNORECASE)
+
+_REEXTRACT_INSTRUCTION = (
+    "The visitor's message states a gas, a flow rate WITH UNITS, and a discharge pressure. "
+    "Extract ALL of them now — do NOT leave gas, capacity, capacity_unit or discharge_p null when "
+    "the message contains them, and do NOT ask for something the message already gave."
+)
+
+
+def _message_has_full_duty(text: str) -> bool:
+    """True if the message already states a flow-with-units AND a pressure (a complete duty)."""
+    return bool(_CAP_RE.search(text or "") and _PRES_RE.search(text or ""))
 
 
 def _extract_slots(raw: dict) -> dict:
@@ -61,6 +83,26 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
     )
     slots = _extract_slots(raw)
 
+    # Structural slot-complete rule (LLD-AG-01): if the message plainly states a flow-with-units
+    # and a pressure but the slot LLM under-extracted a numeric slot, re-extract once emphatically
+    # — a complete duty MUST reach match_capability, not a slot question.
+    if _first_missing(slots) in ("capacity", "discharge_p") and _message_has_full_duty(latest_user):
+        retry = call_json(
+            client=None,
+            complete=ctx.complete,
+            messages=build_chat_messages(
+                prompt_body + "\n\n" + respond_in(language) + "\n\n" + _REEXTRACT_INSTRUCTION,
+                history, latest_user,
+            ),
+            json_schema=APPLICATION_SCHEMA,
+            schema_name="application_slots",
+            kind="slots_retry",
+            section_id=None,
+        )
+        retried = _extract_slots(retry)
+        if _first_missing(retried) is None:  # only accept a retry that completed the duty
+            slots, raw = retried, retry
+
     missing = _first_missing(slots)
     if missing is not None:
         question = raw.get("message") or _SLOT_QUESTIONS[missing]
@@ -83,6 +125,25 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
     result = match_rec.result
     matches = result.get("matches", [])
     non_comparable = result.get("non_comparable_candidates", [])
+
+    # Relaxation: `standard` and `lubricated` are OPTIONAL filters, and the slot LLM sometimes
+    # infers one the visitor never stated (e.g. "diaphragm compressor" → API-618). A published
+    # family may not list that standard/lubrication yet still fit the duty, so if the filtered
+    # match is empty we retry on the required dimensions (gas + capacity + pressure) alone before
+    # concluding no-match. Capacity/pressure envelope filtering is unchanged, so this never
+    # invents an out-of-range match — the family's own row stays the authority.
+    if not matches and (slots.get("standard") or slots.get("lubricated") is not None):
+        match_rec = tools.match_capability(
+            gas=slots["gas"],
+            capacity=float(slots["capacity"]),
+            capacity_unit=slots["capacity_unit"],
+            discharge_p=float(slots["discharge_p"]),
+            lubricated=None,
+            standard=None,
+        )
+        result = match_rec.result
+        matches = result.get("matches", [])
+        non_comparable = result.get("non_comparable_candidates", [])
 
     if not matches:
         # No published family whose comparable envelope contains the duty. Offer engineer review
@@ -120,19 +181,20 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
         pass
 
     extra = (
-        f"The recommended family is {top['family_name']}. State its published limits from the "
-        f"match_capability result — capacity up to {top.get('capacity_max')} "
-        f"{top.get('capacity_unit')}, discharge up to {top.get('discharge_p_max')} "
-        f"{top.get('pressure_unit')} — as published limits, not a quotation. Do not quote a "
-        "capacity or pressure figure from any other family or from the document text."
+        f"Name the gas the visitor asked about ({slots['gas']}) in your reply, then "
+        f"recommend the {top['family_name']} range. State its published capacity and pressure "
+        f"exactly — up to {format_number(top.get('capacity_max'))} {top.get('capacity_unit')} and "
+        f"up to {format_number(top.get('discharge_p_max'))} {top.get('pressure_unit')} — in natural "
+        "prose, not as a quotation. Do not quote a capacity or pressure from any other family or "
+        "from the document text."
     )
     if top.get("near_edge"):
         extra += (
-            " This duty is near that family's published limit — recommend confirming the exact "
-            "frame with Jyotech's engineers."
+            " This duty sits near the top of that range, so suggest confirming the exact frame with "
+            "our engineers."
         )
     else:
-        extra += " This duty sits inside the published range, so present it confidently."
+        extra += " This duty sits comfortably inside the range, so say so plainly."
 
     message, citations = compose_grounded_answer(
         complete=ctx.complete,
@@ -143,6 +205,11 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
         language=language,
         extra_instruction=extra,
     )
+    # The matched row is the authority for the recommendation, so always ground it — cite the
+    # match even if the compose LLM only listed the supporting catalogue chunk (honest: the match
+    # IS what the answer is built on). Its cap + family ids flow through the grounding gate.
+    if match_rec.tr_id not in citations:
+        citations.append(match_rec.tr_id)
     return AgentOutput(
         action="answer",
         draft_text=message,

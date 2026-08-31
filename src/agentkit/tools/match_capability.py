@@ -106,10 +106,12 @@ def _headroom(value: float, limit) -> float | None:
 
 
 def _fit_key(match: dict) -> tuple:
-    """Rank matches by fit: not-near-edge first, then more margin (avg headroom) first."""
+    """Rank matches by fit: a family published in the QUERY's own unit first (no conversion, so
+    the family designed for that duty — e.g. a SCMD natural-gas machine for a SCMD duty — beats a
+    broad family reached only by unit conversion), then not-near-edge, then more margin first."""
     hs = [h for h in match["headroom"].values() if h is not None]
     avg = sum(hs) / len(hs) if hs else 0.0
-    return (match["near_edge"], -avg, match["cap_id"])
+    return (not match.get("same_unit", False), match["near_edge"], -avg, match["cap_id"])
 
 
 def match_capability(
@@ -225,6 +227,9 @@ def match_capability(
                 "pressure": _headroom(discharge_p, p_max),
             },
             "near_edge": near_edge,
+            # True when the family is published in the query's own capacity unit (no conversion) —
+            # a stronger fit than a family reached only by converting units (ranked first).
+            "same_unit": canonical_capacity_unit(row["capacity_unit"]) == query_cap_unit,
         }
         if row["lubricated"] is None:
             match["lubricated_unspecified"] = True

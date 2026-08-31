@@ -80,14 +80,16 @@ def make_ctx(seeded_conn):
 
     activate_all_prompts(seeded_conn)
 
-    def _make(fake_llm, *, embed=None, gas_aliases=None):
+    def _make(fake_llm, *, embed=None, gas_aliases=None, settings=None):
         from agentkit.client_config import gas_alias_map
+        from agentkit.config import get_settings
 
         return Ctx(
             conn=seeded_conn,
             client="jyotech",
             complete=fake_llm,
             embed=embed,
+            settings=settings if settings is not None else get_settings(),
             gas_aliases=gas_aliases if gas_aliases is not None else gas_alias_map("jyotech"),
         )
 

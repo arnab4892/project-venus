@@ -76,8 +76,15 @@ def test_out_of_scope_forces_in_scope_false_and_deflects():
     assert decide_route(t) == ("deflect", "declined_oos")
 
 
-def test_deferred_intents_hold_via_deflect():
-    for intent in ("product_question", "after_sales", "commercial"):
+def test_all_in_scope_intents_route_to_their_agent():
+    # 5b: the previously-deferred intents now land on their own agent (LLD-AG-02..05); deflect
+    # is reserved for out-of-scope. (Full per-intent coverage: tests/runtime/test_routing.py.)
+    expected = {
+        "product_question": "product_advisor",
+        "after_sales": "after_sales_intake",
+        "commercial": "commercial_routing",
+    }
+    for intent, route in expected.items():
         t = _triage(
             {
                 "division": "fire_rescue",
@@ -88,7 +95,7 @@ def test_deferred_intents_hold_via_deflect():
                 "confidence": 0.9,
             }
         )
-        assert decide_route(t) == ("deflect", "deflected")
+        assert decide_route(t) == (route, None)
 
 
 def test_bad_enum_values_coerced():

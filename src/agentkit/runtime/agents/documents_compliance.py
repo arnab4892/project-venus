@@ -1,0 +1,104 @@
+"""Documents & Compliance agent (LLD-AG-03).
+
+Serves catalogues/datasheets/certificates and verbatim company/compliance facts. Tools:
+``search_documents`` (04), ``get_company_fact`` (05), ``get_office`` (06).
+
+* A **download / catalogue** ask (the catalogue-download question class) emits a
+  ``document_card`` message (``kind="document_card"``, ``payload={title, url, locator}``) for
+  the top matching document, alongside a short grounded text intro. The card's title comes from
+  ``facts.document.title`` when published, else a readable label derived from the document URL
+  (the live PDF catalogues carry a null title).
+* A **company / compliance** ask (certifications, founding, coverage, facilities…) is answered
+  verbatim from ``get_company_fact``.
+
+Retrieval query is English even for a Hindi/Hinglish message (``english_query``, LLD-RT-07);
+the reply is in the visitor's language. The card rides the answer path, so a failed grounding
+gate drops it with the drafted text (LLD-RT-05).
+"""
+
+from __future__ import annotations
+
+from urllib.parse import unquote, urlsplit
+
+from agentkit.runtime.agents.base import AgentOutput, compose_grounded_answer
+from agentkit.runtime.agents.faq_company import _kind_for
+from agentkit.runtime.language import english_query
+from agentkit.runtime.ops import MessageRecord
+
+# Words that signal the visitor wants a downloadable document (→ a document_card).
+_DOC_KEYWORDS = (
+    "catalog", "catalogue", "download", "datasheet", "data sheet", "brochure", "leaflet",
+    "pdf", "document", "spec sheet", "spec-sheet", "manual",
+)
+
+
+def _wants_document(text: str) -> bool:
+    q = text.lower()
+    return any(k in q for k in _DOC_KEYWORDS)
+
+
+def title_from_url(url: str | None) -> str:
+    """A readable document label from its URL basename (decoded, extension stripped)."""
+    if not url:
+        return "Document"
+    name = unquote(urlsplit(url).path.rsplit("/", 1)[-1])
+    for ext in (".pdf", ".html", ".php", ".htm"):
+        if name.lower().endswith(ext):
+            name = name[: -len(ext)]
+    return name.strip() or "Document"
+
+
+def _document_card(chunk: dict) -> MessageRecord:
+    """Build a document_card message from a search hit (title/url/locator)."""
+    return MessageRecord(
+        role="assistant",
+        kind="document_card",
+        payload={
+            "title": chunk.get("title") or title_from_url(chunk.get("url")),
+            "url": chunk.get("url"),
+            "locator": chunk.get("locator"),
+        },
+    )
+
+
+def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput:
+    language = triage.get("language", "en")
+
+    kind = _kind_for(latest_user)
+    if kind is not None:
+        tools.get_company_fact(kind)
+
+    # Document search (best-effort; translated to English for retrieval).
+    query = english_query(ctx.complete, latest_user, language)
+    top_chunk = None
+    try:
+        rec = tools.search_documents(query, k=3)
+        chunks = rec.result.get("chunks", [])
+        if chunks:
+            top_chunk = chunks[0]
+    except Exception:  # noqa: BLE001 - missing retrieval infra ≠ a failure
+        pass
+
+    extra_messages: list[MessageRecord] = []
+    if top_chunk is not None and _wants_document(latest_user):
+        extra_messages.append(_document_card(top_chunk))
+
+    message, citations = compose_grounded_answer(
+        complete=ctx.complete,
+        prompt_body=prompt_body,
+        history=history,
+        latest_user=latest_user,
+        records=tools.records,
+        language=language,
+        extra_instruction=(
+            "State company facts verbatim from the tool results. If the visitor asked for a "
+            "downloadable document, point them to it (a card with the link is shown alongside)."
+        ),
+    )
+    return AgentOutput(
+        action="answer",
+        draft_text=message,
+        citations=citations,
+        extra_messages=extra_messages,
+        output={"action": "answer", "kind": kind, "served_card": bool(extra_messages)},
+    )
