@@ -213,3 +213,65 @@ def test_stream_turn_surfaces_turn_runner_exception_as_error_update():
     err = updates[-1]
     assert "RuntimeError" in err.text  # message shown to the user
     assert "boom in the graph" in err.trace  # full traceback into the trace panel
+
+
+# --- real stage events: queue iterator + stage_source branch (Part A) ------
+
+
+def test_queue_stages_iterator_is_reusable_across_empty_reads():
+    """The queue-backed iterator yields pending labels, StopIterations on empty, then resumes."""
+    import queue
+
+    from apps.dev_ui import _QueueStages
+
+    q: "queue.Queue[str]" = queue.Queue()
+    it = iter(_QueueStages(q))
+
+    q.put("one")
+    q.put("two")
+    assert next(it) == "one"
+    assert next(it) == "two"
+
+    # momentarily empty → StopIteration (harness falls back to its generic line)…
+    try:
+        next(it)
+        raise AssertionError("expected StopIteration on empty queue")
+    except StopIteration:
+        pass
+
+    # …and a later put is still delivered — unlike a spent generator.
+    q.put("three")
+    assert next(it) == "three"
+
+
+def test_stream_turn_status_updates_come_from_stage_source():
+    """When a stage_source is supplied, STATUS updates carry its labels in order."""
+    import threading
+
+    labels = ["Understanding your question", "Finding the right specialist", "Looking into it"]
+    provider, _ = _counting_provider()
+    state: dict = {}
+    release = threading.Event()
+
+    def turn_runner(session_id, message):
+        # Keep the worker alive long enough for the poller to drain several labels.
+        release.wait(timeout=2)
+        return _fake_result()
+
+    statuses: list[str] = []
+    for up in stream_turn(
+        "hello",
+        state,
+        turn_runner=turn_runner,
+        session_provider=provider,
+        stage_source=iter(labels),
+        poll=0.01,
+    ):
+        if up.kind == STATUS:
+            statuses.append(up.status)
+            if len(statuses) >= len(labels):
+                release.set()
+
+    # the status stream begins with the fed labels, in node order (extras, if any, are the
+    # generic fallback line emitted once the source is exhausted — never a reordered label)
+    assert statuses[: len(labels)] == labels

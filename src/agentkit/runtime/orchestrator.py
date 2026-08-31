@@ -90,6 +90,10 @@ class Ctx:
     embed: Callable | None = None
     settings: Settings = field(default_factory=get_settings)
     gas_aliases: dict[str, str] = field(default_factory=dict)
+    # Optional read-only progress seam: called once at the top of each node with a short human
+    # label. Live streaming surfaces (the Gradio harness) plug a queue in here; the CLI leaves it
+    # None, so the callback is inert and the turn is byte-for-byte unchanged.
+    on_stage: Callable[[str], None] | None = None
 
 
 @dataclass
@@ -147,8 +151,15 @@ def _user_texts(history: list[dict], latest_user: str) -> list[str]:
 
 # --- graph nodes -----------------------------------------------------------
 
+def _stage(wf: "WorkflowState", label: str) -> None:
+    """Emit a short human progress label to the optional read-only ``on_stage`` seam."""
+    if wf.ctx.on_stage is not None:
+        wf.ctx.on_stage(label)
+
+
 def n_triage(state: _GState) -> dict:
     wf = state["wf"]
+    _stage(wf, "Understanding your question")
     body, pid = active_prompt(wf.ctx.conn, wf.ctx.client, "triage")
     try:
         wf.triage = run_triage(
@@ -175,12 +186,14 @@ def n_triage(state: _GState) -> dict:
 
 def n_route(state: _GState) -> dict:
     wf = state["wf"]
+    _stage(wf, "Finding the right specialist")
     wf.route, wf.forced_outcome = decide_route(wf.triage)
     return {}
 
 
 def n_agent(state: _GState) -> dict:
     wf = state["wf"]
+    _stage(wf, "Looking into it")
     if wf.route == "clarify":
         wf.reply_messages = [MessageRecord("assistant", "text", CLARIFY_MESSAGE)]
         wf.outcome = "clarify"
@@ -235,6 +248,7 @@ def n_agent(state: _GState) -> dict:
 
 def n_ground(state: _GState) -> dict:
     wf = state["wf"]
+    _stage(wf, "Checking our sources")
     out = wf.agent_out
 
     if out is not None:
@@ -281,6 +295,7 @@ def n_ground(state: _GState) -> dict:
 
 def n_respond(state: _GState) -> dict:
     wf = state["wf"]
+    _stage(wf, "Finishing up")
     messages = [MessageRecord("user", "text", wf.latest_user), *wf.reply_messages]
     turn = TurnRecord(
         session_id=wf.session_id,

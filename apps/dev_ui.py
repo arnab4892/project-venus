@@ -22,11 +22,35 @@ supersedes this harness and is unaffected by it. See ``apps/README.md``.
 from __future__ import annotations
 
 import os
+import queue
 import sys
 from pathlib import Path
 from typing import Any, Callable
 
 from apps.harness import ERROR, FINAL, STATUS, TOKEN, stream_turn
+
+
+class _QueueStages:
+    """Drain a thread-safe queue of stage labels as a *reusable* iterator.
+
+    The orchestrator's ``on_stage`` fires from the turn's background worker thread while the
+    harness polls ``next()`` from the main thread — a :class:`queue.Queue` bridges the two. Each
+    ``next()`` pops one pending label or raises ``StopIteration`` when momentarily empty (the
+    harness then shows its generic elapsed-seconds line for that poll). Unlike a generator, this
+    stays usable after an empty read: a later ``next()`` yields whatever the worker has since put.
+    """
+
+    def __init__(self, q: "queue.Queue[str]") -> None:
+        self._q = q
+
+    def __iter__(self) -> "_QueueStages":
+        return self
+
+    def __next__(self) -> str:
+        try:
+            return self._q.get_nowait()
+        except queue.Empty:
+            raise StopIteration
 
 _ENV_GATE = "JYOTECH_DEV_UI"
 
@@ -141,7 +165,9 @@ def _build_seams() -> tuple[Callable[[], Any], Callable[[Any, str], Any]]:
                 sid = create_session(conn, client, release_id)
         return sid
 
-    def turn_runner(session_id: Any, message: str) -> Any:
+    def turn_runner(
+        session_id: Any, message: str, on_stage: Callable[[str], None] | None = None
+    ) -> Any:
         with connect() as conn:
             with conn.begin():
                 history = rebuild_context(conn, session_id)
@@ -151,6 +177,7 @@ def _build_seams() -> tuple[Callable[[], Any], Callable[[Any, str], Any]]:
                     complete=complete_fn,
                     embed=None,  # live self-hosted embedder inside search_documents
                     gas_aliases=gas_aliases,
+                    on_stage=on_stage,
                 )
                 return run_turn(ctx, session_id, message, history=history)
 
@@ -245,11 +272,16 @@ def build_app(session_provider: Callable[[], Any], turn_runner: Callable[[Any, s
             acc = ""
             sources_out: Any = gr.update()
             trace_out: Any = gr.update()
+            # Real per-node progress: the orchestrator pushes stage labels onto this queue via
+            # ``on_stage``; the harness drains it through ``stage_source``. Falls back to the
+            # generic indicator whenever the queue is momentarily empty.
+            stage_q: "queue.Queue[str]" = queue.Queue()
             for up in stream_turn(
                 message,
                 state,
-                turn_runner=turn_runner,
+                turn_runner=lambda sid, text: turn_runner(sid, text, on_stage=stage_q.put),
                 session_provider=session_provider,
+                stage_source=_QueueStages(stage_q),
             ):
                 if up.kind == STATUS:
                     history[-1]["content"] = f"_{up.status}_"
