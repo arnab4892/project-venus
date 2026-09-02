@@ -1,7 +1,8 @@
-# Golden question suite (LLD-EVAL-01). 52 questions (the initial 40 + a 6-question Gate-2
+# Golden question suite (LLD-EVAL-01). 53 questions (the initial 40 + a 6-question Gate-2
 # extension + prod-mch16-specs + adversarial-round faq-eiga / faq-founder / cap-false-memory +
-# cap-wellhead-natgas + the faq-api618 machine-standards routing regression): 20 capability,
-# 13 product, 11 company/docs, 6 after-sales, 2 out-of-scope. Each carries the LLD-EVAL-01 fields
+# cap-wellhead-natgas + the faq-api618 machine-standards routing regression + the polish-pass
+# docs-both-catalogues multi-card golden): 20 capability,
+# 13 product, 12 company/docs, 6 after-sales, 2 out-of-scope. Each carries the LLD-EVAL-01 fields
 # (question, expected_answer_contains, expected_source_ids, expected_outcome) plus optional
 # `fact` / `retrieval` execution blocks the runner uses to score the fact and retrieval
 # layers against the LIVE active release. The e2e (agent-answer) layer is reported "pending"
