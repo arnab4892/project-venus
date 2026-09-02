@@ -1,0 +1,43 @@
+---
+title: Housekeeping fix pass — staging timestamps, eval retry, fallback outcome, thinking knob
+date: 2026-09-02
+author: Claude Code (paired with arnab.sharma)
+type: implementation note (four self-contained maintenance items; no agent/prompt behaviour change; rule-6 flags for the next doc pass)
+lld_items: [LLD-DB-06, LLD-EVAL-02, LLD-EVAL-03, LLD-RT-05, LLD-EVAL-01]
+prd_row: PRD-F-015 (staging), PRD-N-005 (eval), PRD-F-008/F-009 (grounding fallback), PRD-N-002 (runtime LLM)
+branch: housekeeping-fix-pass
+---
+
+# Housekeeping fix pass
+
+Four accumulated maintenance items, one commit each, **no agent or prompt behaviour change**. Each
+carries a rule-6 flag where it deviates from or extends the current LLD wording. Verified with
+`pytest -q` and one standalone `agentkit eval run jyotech` (three-layer green) — see §Verification.
+
+## Item 1 — staging timestamps (migration 0005) [rule-6: LLD-DB-06]
+
+`staging.*` was the only mutable store with no per-row chronology. Added `created_at` / `updated_at`
+(both `timestamptz`, server-default `now()`) to the seven content mirrors (`document`,
+`product_family`, `product`, `capability_row`, `capability_gas`, `company_fact`, `office`) and
+`updated_at` to `staging.release_candidate` (it already had `created_at` from `0002`).
+
+- **`facts.*` deliberately untouched** — fact rows are immutable; their history is
+  `facts.release.built_at` + the release diff, not a per-row mutation stamp. `ops.*` supplies its own
+  timestamps and is append-only, so it was not touched either.
+- **Maintenance is at the app UPDATE sites, not a trigger.** All staging writes are raw SQL (there is
+  no ORM, so a SQLAlchemy `onupdate` can never fire) and the codebase has no trigger convention. The
+  columns default on INSERT (so `extract/staging_write.py`'s delete-then-reinsert rewrite gets a fresh
+  `created_at` for free); the three in-place UPDATE sites set `updated_at = clock_timestamp()`
+  explicitly: `ingest/staging_write.py` (`_UPSERT` DO-UPDATE), `release/import_review.py` (`_apply` +
+  the `capability_gas` rejection cascade), and `release/candidate.py` (`set_status`).
+- **`clock_timestamp()`, not `now()`, on update** so the stamp is the real modification instant and
+  strictly advances even within a single transaction (`now()` is fixed at transaction start; an
+  in-transaction rewrite would otherwise read `updated_at == created_at`).
+- **Backfill caveat.** Rows written before `0005` receive `created_at = updated_at = migration time`
+  from the server default — timestamps predating this migration are **not** true chronology; only rows
+  written after it carry real creation history.
+- Migration is reversible (`downgrade` drops the columns). Natural ids stay text (already true).
+
+Tests: `tests/db/test_migration_roundtrip.py` (column presence after upgrade, clean up/down roundtrip)
+and `tests/release/test_release_candidate.py::test_status_update_advances_updated_at_but_not_created_at`
+(an `UPDATE` through `set_status` advances `updated_at` while `created_at` holds).

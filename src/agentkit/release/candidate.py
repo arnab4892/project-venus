@@ -75,7 +75,10 @@ def set_status(conn: Connection, rc_id: str, status: str) -> None:
     if status not in RC_STATUSES:
         raise ValueError(f"unknown RC status {status!r}; expected one of {RC_STATUSES}")
     result = conn.execute(
-        text("UPDATE staging.release_candidate SET status = :s WHERE id = :id"),
+        text(
+            "UPDATE staging.release_candidate "
+            "SET status = :s, updated_at = clock_timestamp() WHERE id = :id"
+        ),
         {"s": status, "id": rc_id},
     )
     if result.rowcount == 0:

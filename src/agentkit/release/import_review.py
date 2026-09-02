@@ -194,7 +194,10 @@ def _apply(conn: Connection, rc_id: str, d: _Decision, *, reviewer: str,
     params: dict[str, object] = {"rc": rc_id, "rev": reviewer, "at": reviewed_at}
     params.update({f"k_{c}": d.keys[c] for c in id_cols})
 
-    sets = ["review_status = :status", "reviewer = :rev", "reviewed_at = :at"]
+    # 0005: stamp updated_at with the real modification instant (clock_timestamp,
+    # not now(), so it advances even within a single import transaction).
+    sets = ["review_status = :status", "reviewer = :rev", "reviewed_at = :at",
+            "updated_at = clock_timestamp()"]
     params["status"] = _STATUS[d.decision]
     if d.decision == "edit":
         for col, value in d.edits.items():
@@ -241,7 +244,7 @@ def import_review(
     conn.execute(
         text(
             "UPDATE staging.capability_gas g SET review_status = 'rejected', "
-            "reviewer = :rev, reviewed_at = :at "
+            "reviewer = :rev, reviewed_at = :at, updated_at = clock_timestamp() "
             "WHERE g.release_candidate_id = :rc AND EXISTS ("
             "  SELECT 1 FROM staging.capability_row c "
             "  WHERE c.release_candidate_id = :rc AND c.cap_id = g.cap_id "

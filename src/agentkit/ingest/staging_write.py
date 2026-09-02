@@ -20,7 +20,8 @@ _UPSERT = text(
         kind        = EXCLUDED.kind,
         url         = EXCLUDED.url,
         sha256      = EXCLUDED.sha256,
-        page_count  = EXCLUDED.page_count
+        page_count  = EXCLUDED.page_count,
+        updated_at  = clock_timestamp()  -- 0005: real modification instant on rewrite
     """
 )
 
