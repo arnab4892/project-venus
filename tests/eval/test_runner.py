@@ -125,6 +125,14 @@ def _capability_fake(answer_message: str) -> FakeLLM:
     )
 
 
+def _capability_fake_seq(answer_messages: list[str]) -> FakeLLM:
+    """Like ``_capability_fake`` but the ``answer`` schema is a FIFO queue: attempt N gets
+    ``answer_messages[N]``. Used to script fail-then-pass across the e2e retry."""
+    fake = _capability_fake(answer_messages[0])
+    fake._responses["answer"] = [{"message": m, "citations": ["tr1"]} for m in answer_messages]
+    return fake
+
+
 _E2E_Q = {
     "id": "e2e-cap",
     "question": "hydrogen 3000 Nm3/hr at 350 bar oil-free",
@@ -132,6 +140,9 @@ _E2E_Q = {
     "expected_answer_contains": ["process gas"],
     "expected_source_ids": ["fam.process_recip"],
 }
+
+_PASS_MSG = "That duty fits our process gas reciprocating range [tr1]."
+_FAIL_MSG = "Our process gas reciprocating range; near-edge — talk to engineers [tr1]."
 
 
 def test_e2e_layer_passes_a_scripted_conversation(seeded_conn):
@@ -158,6 +169,46 @@ def test_e2e_missing_expected_text_fails(seeded_conn):
     )
     assert report.ok is False
     assert report.results[0].status("e2e") == "fail"
+
+
+def test_e2e_retry_pass_is_flaky(seeded_conn):
+    # First attempt trips must_not_contain, the single retry passes → FLAKY: counts as a pass
+    # for the gate but the report keeps the FIRST attempt's evidence, labelled (LLD-EVAL-02).
+    fake = _capability_fake_seq([_FAIL_MSG, _PASS_MSG])
+    q = {**_E2E_Q, "must_not_contain": ["near-edge"]}
+    report = run_eval(seeded_conn, "jyotech", questions=[q], complete=fake, layers=("e2e",))
+    assert report.ok is True  # flaky does not block the gate
+    assert report.results[0].status("e2e") == "flaky"
+    detail = next(r.detail for r in report.results[0].layers if r.layer == "e2e")
+    assert "flaky (passed on retry)" in detail
+    assert "near-edge" in detail  # the first attempt's failing evidence is preserved
+    # counts surface the flaky bucket so variance stays visible
+    assert report.counts()["e2e"].get("flaky") == 1
+
+
+def test_e2e_two_consecutive_failures_block(seeded_conn):
+    # Both attempts fail → a real failure that blocks the gate (no flaky rescue).
+    fake = _capability_fake_seq([_FAIL_MSG, _FAIL_MSG])
+    q = {**_E2E_Q, "must_not_contain": ["near-edge"]}
+    report = run_eval(seeded_conn, "jyotech", questions=[q], complete=fake, layers=("e2e",))
+    assert report.ok is False
+    assert report.results[0].status("e2e") == "fail"
+    assert "flaky" not in report.counts()["e2e"]
+
+
+def test_fact_layer_failure_is_never_retried_or_flaky(seeded_conn):
+    # Fact is deterministic: a failure stays a hard fail — the retry mechanism is e2e-only.
+    q = {
+        "id": "cap-fail",
+        "question": "expects a family that isn't returned",
+        "expected_outcome": "answer",
+        "fact": {"tool": "match_capability", "args": _HYDROGEN_ARGS,
+                 "expect_ids": ["fam.does_not_exist"]},
+    }
+    report = run_eval(seeded_conn, "jyotech", questions=[q], layers=("fact",))
+    assert report.ok is False
+    assert report.results[0].status("fact") == "fail"
+    assert "flaky" not in report.counts().get("fact", {})
 
 
 def test_activation_blocked_on_e2e_failure(seeded_conn):

@@ -41,3 +41,25 @@ carries a rule-6 flag where it deviates from or extends the current LLD wording.
 Tests: `tests/db/test_migration_roundtrip.py` (column presence after upgrade, clean up/down roundtrip)
 and `tests/release/test_release_candidate.py::test_status_update_advances_updated_at_but_not_created_at`
 (an `UPDATE` through `set_status` advances `updated_at` while `created_at` holds).
+
+## Item 2 — eval e2e retry-once flaky policy [rule-6: LLD-EVAL-02/03]
+
+The e2e layer runs the live runtime LLM and carries a known ~1-per-run transient that would
+intermittently fail the golden gate on otherwise-good runs. Absorbed **by mechanism, not judgement**,
+in `eval/runner.py`:
+
+- **e2e layer only.** A failed e2e attempt is retried **exactly once**. If the retry passes, the
+  question is `FLAKY` — it counts as a pass for the gate (`EvalReport.ok` treats `flaky` as non-fail)
+  but the report keeps the **first** attempt's evidence, prefixed `flaky (passed on retry)`, so the
+  variance is never hidden. **Two consecutive failures is a real `FAIL`** and blocks exactly as
+  before. Each attempt already runs in its own rolled-back savepoint, so the retry is independent and
+  still writes no `ops.*` row. Implemented by extracting the run+score body into `_e2e_attempt` and
+  wrapping the retry decision in `_e2e_layer`.
+- **Fact/retrieval never retry** — they are deterministic; the retry path lives only in the e2e layer.
+- **Summary surfaces flaky counts.** The per-layer summary now reads `passed/applicable` with a flaky
+  suffix, e.g. `e2e   53/53, 1 flaky` (applicable excludes na/skip; passed = pass + flaky), so a
+  masked transient is always visible in the report.
+
+Tests (`tests/eval/test_runner.py`, scripting fail-then-pass via a FIFO `answer` queue): retry-pass →
+`flaky`, `report.ok` True, first-attempt evidence labelled; two failures → `fail`, gate blocks; a
+deterministic fact failure stays `fail` and never goes flaky.
