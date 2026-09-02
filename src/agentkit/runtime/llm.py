@@ -41,6 +41,9 @@ class RuntimeClient:
     temperature: float | None = None
     reasoning_effort: str | None = None
     max_completion_tokens: int | None = None
+    # Apply Qwen3/vLLM thinking-off to the COMPOSE call only (schema_name == "answer"); triage and
+    # the per-agent parse calls use other schema names and are never affected. Default off.
+    disable_thinking: bool = False
     _client: Any = None
 
     def _openai(self) -> Any:
@@ -77,6 +80,9 @@ class RuntimeClient:
             temperature=self.temperature,
             reasoning_effort=self.reasoning_effort,
             max_completion_tokens=self.max_completion_tokens,
+            # Thinking-off is scoped to the compose call — the final answer composition is the
+            # only runtime call using the "answer" schema (triage/parse have their own names).
+            disable_thinking=self.disable_thinking and schema_name == "answer",
         )
         resp = self._openai().chat.completions.create(**kwargs)  # pragma: no cover
         usage = getattr(resp, "usage", None)
@@ -110,4 +116,5 @@ def build_runtime_client(settings: Settings | None = None) -> RuntimeClient:
         temperature=settings.llm_temperature,
         reasoning_effort=settings.llm_reasoning_effort,
         max_completion_tokens=settings.llm_max_completion_tokens,
+        disable_thinking=settings.llm_disable_thinking,
     )

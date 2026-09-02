@@ -8,9 +8,11 @@ Python — no DB, no network.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from agentkit.config import Settings
-from agentkit.extract.llm import call_json
-from agentkit.runtime.llm import build_runtime_client
+from agentkit.extract.llm import build_request_kwargs, call_json
+from agentkit.runtime.llm import RuntimeClient, build_runtime_client
 
 
 def _settings(**overrides: object) -> Settings:
@@ -56,6 +58,68 @@ def test_runtime_sampling_knobs_flow_from_settings() -> None:
     assert client.temperature == 0.0
     assert client.reasoning_effort == "low"
     assert client.max_completion_tokens is None
+
+
+# --- Qwen thinking-off knob (compose-only), LLD-RT / PRD-N-002 -----------------
+
+def test_disable_thinking_flag_flows_from_settings() -> None:
+    assert build_runtime_client(_settings()).disable_thinking is False
+    assert build_runtime_client(_settings(llm_disable_thinking=True)).disable_thinking is True
+
+
+def test_build_request_kwargs_disable_thinking_merges_with_reasoning_effort() -> None:
+    # thinking-off must be added to extra_body WITHOUT clobbering a coexisting reasoning_effort.
+    kwargs = build_request_kwargs(
+        "qwen3", [{"role": "user", "content": "hi"}], {"type": "object"}, "answer",
+        reasoning_effort="low", disable_thinking=True,
+    )
+    assert kwargs["extra_body"] == {
+        "reasoning_effort": "low",
+        "chat_template_kwargs": {"enable_thinking": False},
+    }
+
+
+def test_build_request_kwargs_no_extra_body_when_nothing_set() -> None:
+    kwargs = build_request_kwargs(
+        "qwen3", [{"role": "user", "content": "hi"}], {"type": "object"}, "answer",
+    )
+    assert "extra_body" not in kwargs
+
+
+def _capturing_openai(capture: list) -> SimpleNamespace:
+    """A stand-in OpenAI client that records create() kwargs and returns a minimal response."""
+    def create(**kwargs):
+        capture.append(kwargs)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="{}"))],
+            usage=SimpleNamespace(prompt_tokens=0, completion_tokens=0),
+        )
+    return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+
+
+def test_thinking_off_applies_to_compose_only() -> None:
+    # With the knob on, only the compose call (schema_name == "answer") carries thinking-off;
+    # triage and parse calls (other schema names) are untouched.
+    capture: list = []
+    client = RuntimeClient(base_url="x", model="qwen3", disable_thinking=True)
+    client._client = _capturing_openai(capture)
+
+    client.raw_complete([{"role": "user", "content": "hi"}], {"type": "object"}, "answer")
+    assert capture[-1]["extra_body"] == {"chat_template_kwargs": {"enable_thinking": False}}
+
+    client.raw_complete([{"role": "user", "content": "hi"}], {"type": "object"}, "triage")
+    assert "extra_body" not in capture[-1]
+
+    client.raw_complete([{"role": "user", "content": "hi"}], {"type": "object"}, "product_query")
+    assert "extra_body" not in capture[-1]
+
+
+def test_thinking_off_knob_off_leaves_compose_untouched() -> None:
+    capture: list = []
+    client = RuntimeClient(base_url="x", model="qwen3", disable_thinking=False)
+    client._client = _capturing_openai(capture)
+    client.raw_complete([{"role": "user", "content": "hi"}], {"type": "object"}, "answer")
+    assert "extra_body" not in capture[-1]
 
 
 def test_call_json_through_injected_complete_seam() -> None:
