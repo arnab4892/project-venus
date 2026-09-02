@@ -8,7 +8,7 @@ Python — exercises ``ground_answer`` / ``_citations_from_record`` directly.
 
 from __future__ import annotations
 
-from agentkit.runtime.grounding import ground_answer
+from agentkit.runtime.grounding import ground_answer, used_documents
 from agentkit.runtime.ops import ToolCallRecord
 
 
@@ -93,3 +93,65 @@ def test_only_cited_results_become_citations():
     assert "fact" not in kinds
     doc_cite = [c for c in gr.citations if c.kind == "document"][0]
     assert doc_cite.ref_id == "doc.process"
+
+
+# --- used_documents: distinct docs the answer referenced (cards + multi-doc citations) --------
+
+_PROCESS_CHUNK = {
+    "chunk_id": "ch.process.0", "doc_id": "doc.process",
+    "locator": "p1 §PROCESS", "url": "https://x/PROCESS.pdf",
+    "content_md": "process compressors reciprocating industrial catalogue",
+}
+_FS_CHUNK = {
+    "chunk_id": "ch.fs.0", "doc_id": "doc.fs",
+    "locator": "p1 §F&S", "url": "https://x/F&S.pdf",
+    "content_md": "fire rescue diving equipment catalogue breathing",
+}
+
+
+def _doc_ids(reps):
+    return [c["doc_id"] for c in reps]
+
+
+def test_used_documents_returns_each_referenced_doc_in_order():
+    chunks = [_PROCESS_CHUNK, _FS_CHUNK]
+    answer = "We publish our process compressors catalogue and our fire rescue diving catalogue."
+    assert _doc_ids(used_documents(chunks, answer)) == ["doc.process", "doc.fs"]
+
+
+def test_used_documents_dedupes_and_caps():
+    # two chunks from the same doc collapse to one representative; cap bounds the list
+    chunks = [_PROCESS_CHUNK, dict(_PROCESS_CHUNK, chunk_id="ch.process.1"), _FS_CHUNK]
+    assert _doc_ids(used_documents(chunks, "process rescue diving catalogue")) == [
+        "doc.process", "doc.fs",
+    ]
+    assert _doc_ids(
+        used_documents(chunks, "process rescue diving catalogue", cap=1)
+    ) == ["doc.process"]
+
+
+def test_used_documents_single_reference_yields_one():
+    chunks = [_PROCESS_CHUNK, _FS_CHUNK]
+    assert _doc_ids(used_documents(chunks, "our fire rescue diving catalogue")) == ["doc.fs"]
+
+
+def test_used_documents_no_overlap_falls_back_to_one():
+    chunks = [_PROCESS_CHUNK, _FS_CHUNK]
+    reps = used_documents(chunks, "completely unrelated prose about weather")
+    assert len(reps) == 1  # never zero the source
+
+
+def test_both_referenced_documents_are_cited():
+    rec = ToolCallRecord(
+        tr_id="tr1", tool="search_documents",
+        args={"query": "catalogues"},
+        result={"chunks": [_PROCESS_CHUNK, _FS_CHUNK]},
+        rows_returned=2, latency_ms=1,
+    )
+    gr = ground_answer(
+        "Here are our process compressors catalogue and fire rescue diving catalogue [tr1].",
+        ["tr1"], [rec], ["what catalogues do you have"],
+    )
+    assert gr.ok
+    doc_ids = {c.ref_id for c in gr.citations if c.kind == "document"}
+    assert {"doc.process", "doc.fs"} <= doc_ids

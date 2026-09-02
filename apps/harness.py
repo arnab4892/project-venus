@@ -191,6 +191,7 @@ def stream_turn(
     stage_source: Optional[Iterable[str]] = None,
     clock: Callable[[], float] = time.monotonic,
     poll: float = 0.1,
+    token_delay: float = 0.03,
 ) -> Iterator[Update]:
     """Drive one turn, yielding Updates: STATUS… then TOKEN… then FINAL — or ERROR.
 
@@ -199,9 +200,15 @@ def stream_turn(
       emitted while it runs; any exception it raises is captured and surfaced as a single
       terminal ERROR update (never a swallowed exception, never an endless "working…").
     - ``session_provider() -> session_id`` creates the tab session on first use.
-    - ``stage_source``: optional iterator of status strings — the seam the deferred
-      read-only ``on_stage`` queue plugs into. Defaults to a single honest generic
-      indicator with elapsed seconds.
+    - ``stage_source``: optional iterator of status strings — the seam the read-only
+      ``on_stage`` queue plugs into. Labels are **sticky** and accumulate into a trail
+      (completed stages prefixed ✓, the current one last with the ticking timer); an empty
+      poll keeps the current label rather than reverting. Without a source (or before the
+      first label) a single honest generic indicator with elapsed seconds is shown.
+    - ``token_delay``: seconds slept after each TOKEN emission so the typewriter phase
+      actually paces out (Gradio repaints per yield); without it every word lands in one
+      frame and the answer appears in a single paint. Tests pass ``0`` to stay fast — the
+      ordering assertions are unaffected.
 
     An initial STATUS update is always emitted before the first thread join, so the
     ordering (status → final/error) is deterministic even when the turn returns instantly.
@@ -222,14 +229,28 @@ def stream_turn(
     worker.start()
 
     src = iter(stage_source) if stage_source is not None else None
+    # Sticky stage trail: labels accumulate here (in arrival order); the last is the current
+    # stage, the earlier ones are completed. A label stays shown until the next one arrives — an
+    # empty poll never reverts to the generic line (that only renders before the first label).
+    trail: list[str] = []
+
+    def _drain() -> None:
+        if src is None:
+            return
+        while True:
+            try:
+                trail.append(next(src))
+            except StopIteration:
+                break
 
     def _status() -> Update:
-        if src is not None:
-            try:
-                return Update(kind=STATUS, status=next(src))
-            except StopIteration:
-                pass
-        return Update(kind=STATUS, status=f"{_GENERIC_STATUS}… ({int(clock() - start)}s)")
+        _drain()
+        elapsed = int(clock() - start)
+        if not trail:
+            return Update(kind=STATUS, status=f"{_GENERIC_STATUS}… ({elapsed}s)")
+        done = " · ".join(f"✓ {label}" for label in trail[:-1])
+        current = f"{trail[-1]}… ({elapsed}s)"
+        return Update(kind=STATUS, status=f"{done} · {current}" if done else current)
 
     yield _status()
     while worker.is_alive():
@@ -251,6 +272,8 @@ def stream_turn(
     final_text = render_messages(getattr(result, "messages", None) or [])
     for word in _iter_words(final_text):
         yield Update(kind=TOKEN, delta=word)
+        if token_delay:
+            time.sleep(token_delay)
     yield Update(
         kind=FINAL,
         text=final_text,

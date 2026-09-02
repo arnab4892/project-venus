@@ -13,10 +13,36 @@ from __future__ import annotations
 
 from tests.runtime._helpers import FakeLLM
 
-from agentkit.runtime.grounding import FALLBACK_TEXT, ground_answer
+from agentkit.runtime.grounding import (
+    FALLBACK_TEXT,
+    all_numbers,
+    ground_answer,
+    redact_unsourced_spec_numbers,
+    spec_numbers,
+)
 from agentkit.runtime.ops import ToolCallRecord
 from agentkit.runtime.orchestrator import run_turn
 from sqlalchemy import text
+
+
+def test_markdown_bold_and_table_do_not_hide_spec_numbers():
+    """Part B formatting keeps each figure next to its unit, so the numeric guard still sees it.
+
+    ``_SPEC_RE`` tolerates only whitespace between number and unit — the persona rule mandates
+    number+unit stay in one bold span / one table cell (``**25,000 Nm³/hr**``, ``| 25,000 Nm³/hr |``),
+    never split. These assert the guard is unaffected by the surrounding ``*`` / ``|``.
+    """
+    assert spec_numbers("**25,000 Nm3/hr**") == {25000.0}
+    assert spec_numbers("| 25,000 Nm3/hr | recip |") == {25000.0}
+    # all_numbers is a superset (it also picks the '3' inside the "Nm3" unit token, pre-existing
+    # and harmless — the universe only needs to *contain* the figure); assert containment.
+    assert 25000.0 in all_numbers("**25,000** Nm3/hr")
+    assert {3000.0, 350.0} <= all_numbers("| 3,000 | 350 |")
+
+    # an unsourced spec figure is still redacted when wrapped in bold or sitting in a table cell
+    clean, stripped = redact_unsourced_spec_numbers("published up to **99,999 Nm3/hr**", set())
+    assert stripped == [99999.0]
+    assert "99,999" not in clean
 
 
 def _match_record() -> ToolCallRecord:

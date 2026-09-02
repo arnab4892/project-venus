@@ -121,6 +121,54 @@ def _best_chunk(chunks: list[dict], answer_text: str | None) -> dict:
     return chunks[best] if _overlap(chunks[best]) > 0 else chunks[0]
 
 
+def _answer_tokens(answer_text: str | None) -> set[str]:
+    low = (answer_text or "").lower().replace(",", "")
+    return {t.replace(",", "") for t in _TOKEN_RE.findall(low)}
+
+
+def _chunk_tokens(chunk: dict) -> set[str]:
+    blob = f"{chunk.get('content_md') or ''} {chunk.get('title') or ''}".lower()
+    return {t.replace(",", "") for t in _TOKEN_RE.findall(blob)}
+
+
+# A document counts as referenced only if the answer shares at least this many distinctive tokens
+# with it — one incidental word (a shared "catalogue"/"compressors") is not a reference.
+_MIN_DOC_OVERLAP = 2
+
+
+def used_documents(chunks: list[dict], answer_text: str | None, *, cap: int | None = None) -> list[dict]:
+    """Distinct documents (by ``doc_id``) whose chunk content the answer actually used.
+
+    One representative chunk per document — the highest-overlap chunk — in retrieval order. This
+    is the multi-document generalisation of :func:`_best_chunk`: a generic "what catalogues do you
+    have" answer references several documents and each is surfaced (a card, a citation); a specific
+    single-document answer yields exactly one.
+
+    A document is *used* when the answer shares at least ``_MIN_DOC_OVERLAP`` distinctive tokens
+    with its chunks — one incidental shared word is not enough. When nothing clears the bar (or the
+    answer is ``None``, or a single document was retrieved), fall back to the single best chunk —
+    never zero the source. ``cap`` bounds the list for presentation; citation derivation passes no
+    cap.
+    """
+    if not chunks:
+        return []
+    ans = _answer_tokens(answer_text)
+    best_by_doc: dict = {}
+    order: list = []
+    for c in chunks:
+        d = c.get("doc_id")
+        overlap = len(_chunk_tokens(c) & ans)
+        if d not in best_by_doc:
+            best_by_doc[d] = (overlap, c)
+            order.append(d)
+        elif overlap > best_by_doc[d][0]:
+            best_by_doc[d] = (overlap, c)
+    used = [best_by_doc[d][1] for d in order if best_by_doc[d][0] >= _MIN_DOC_OVERLAP]
+    if not used:
+        used = [_best_chunk(chunks, answer_text)]
+    return used[:cap] if cap else used
+
+
 def _value_used(value, answer_text: str | None) -> bool:
     """True if a company-fact value is actually reflected in the answer (citation hygiene).
 
@@ -158,9 +206,10 @@ def _citations_from_record(rec: ToolCallRecord, answer_text: str | None = None) 
             add("capability", m["cap_id"])
             add("family", m.get("family_id"))  # parent family of the matched row
     elif rec.tool == "search_documents":
-        chunks = r.get("chunks", [])
-        if chunks:
-            c = _best_chunk(chunks, answer_text)  # the chunk the answer used, not just the top hit
+        # Cite each DISTINCT document the answer actually used (not just the single best chunk) —
+        # a generic catalogue answer legitimately draws on several. Single-document answers still
+        # cite exactly one (used_documents collapses to _best_chunk).
+        for c in used_documents(r.get("chunks", []), answer_text):
             add("chunk", c["chunk_id"], locator=c.get("locator"), url=c.get("url"))
             add("document", c.get("doc_id"), locator=c.get("locator"), url=c.get("url"))
     elif rec.tool == "get_company_fact":
