@@ -26,6 +26,8 @@ into LLD-TOOL-01 via the clarification path.
 
 from __future__ import annotations
 
+from agentkit.runtime.tracing import observe
+
 from sqlalchemy import Connection, text
 
 from agentkit.extract.normalise import (
@@ -114,6 +116,7 @@ def _fit_key(match: dict) -> tuple:
     return (not match.get("same_unit", False), match["near_edge"], -avg, match["cap_id"])
 
 
+@observe(name="match_capability", as_type="tool")
 def match_capability(
     conn: Connection,
     gas: str,

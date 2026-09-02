@@ -14,6 +14,7 @@ flows through the injectable ``complete=`` / ``embed=`` seams so a turn runs off
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Callable, TypedDict
 
@@ -45,8 +46,12 @@ from agentkit.runtime.ops import (
     persist_turn,
 )
 from agentkit.runtime.prompts import active_prompt
+from agentkit.runtime.sources import resolve_sources
 from agentkit.runtime.tools_registry import ToolRunner
+from agentkit.runtime.tracing import annotate_trace, observe, trace_session
 from agentkit.runtime.triage import needs_clarification, run_triage
+
+logger = logging.getLogger(__name__)
 
 CLARIFY_MESSAGE = (
     "Could you tell me a bit more about what you need — a compressor for a specific gas/duty, "
@@ -157,6 +162,7 @@ def _stage(wf: "WorkflowState", label: str) -> None:
         wf.ctx.on_stage(label)
 
 
+@observe(name="n_triage")
 def n_triage(state: _GState) -> dict:
     wf = state["wf"]
     _stage(wf, "Understanding your question")
@@ -184,6 +190,7 @@ def n_triage(state: _GState) -> dict:
     return {}
 
 
+@observe(name="n_route")
 def n_route(state: _GState) -> dict:
     wf = state["wf"]
     _stage(wf, "Finding the right specialist")
@@ -191,6 +198,7 @@ def n_route(state: _GState) -> dict:
     return {}
 
 
+@observe(name="n_agent")
 def n_agent(state: _GState) -> dict:
     wf = state["wf"]
     _stage(wf, "Looking into it")
@@ -246,6 +254,7 @@ def n_agent(state: _GState) -> dict:
     return {}
 
 
+@observe(name="n_ground")
 def n_ground(state: _GState) -> dict:
     wf = state["wf"]
     _stage(wf, "Checking our sources")
@@ -267,6 +276,19 @@ def n_ground(state: _GState) -> dict:
             wf.citations = gr.citations
             wf.grounding = gr.grounding
             wf.outcome = "answered"
+            # Persist what the customer saw: attach the resolved customer-facing sources to the
+            # answer message payload (ops.message.payload — no schema change). Fail-open: the
+            # resolver only reads facts.* views, but a lookup failure must never break the turn —
+            # on any error, log and ship the answer with no sources.
+            if wf.citations:
+                try:
+                    resolved = resolve_sources(wf.ctx.conn, wf.citations)
+                except Exception:  # noqa: BLE001 - sources are presentational; never fail a turn
+                    logger.warning("resolve_sources failed; answering without sources", exc_info=True)
+                    resolved = None
+                if resolved:
+                    answer_msg = wf.reply_messages[0]
+                    answer_msg.payload = {**(answer_msg.payload or {}), "sources": resolved}
         else:
             wf.reply_messages = out.messages
             wf.outcome = {
@@ -293,6 +315,7 @@ def n_ground(state: _GState) -> dict:
     return {}
 
 
+@observe(name="n_respond")
 def n_respond(state: _GState) -> dict:
     wf = state["wf"]
     _stage(wf, "Finishing up")
@@ -353,10 +376,24 @@ class RunResult:
     tool_args: list[dict] = field(default_factory=list)  # each tool's args (allowed-number set)
 
 
+@observe(name="run_turn")
 def run_turn(ctx: Ctx, session_id, latest_user: str, *, history: list[dict] | None = None) -> RunResult:
-    """Run one full turn through the graph and persist it. Returns a display/trace result."""
+    """Run one full turn through the graph and persist it. Returns a display/trace result.
+
+    ``@observe`` makes this the trace **root**, so the per-node/tool/LLM spans created beneath it
+    nest into exactly one Langfuse trace per turn (dev-only; inert when tracing is off). session_id
+    rides the trace via ``trace_session``; turn_id + active prompt_version ids are attached as
+    metadata once the turn has run (turn_id is only minted at ``respond``). ``ops.*`` stays the
+    system of record.
+    """
     wf = WorkflowState(ctx=ctx, session_id=session_id, latest_user=latest_user, history=history or [])
-    _graph().invoke({"wf": wf})
+    with trace_session(session_id):
+        _graph().invoke({"wf": wf})
+        annotate_trace(
+            turn_id=wf.turn_id,
+            session_id=session_id,
+            prompt_ids=[inv.prompt_id for inv in wf.invocations if inv.prompt_id],
+        )
 
     inv_trace = [
         {

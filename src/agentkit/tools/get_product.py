@@ -8,6 +8,8 @@ with no printed ``model_name`` is presented by its family name + variant/descrip
 
 from __future__ import annotations
 
+from agentkit.runtime.tracing import observe
+
 import re
 
 from sqlalchemy import Connection, text
@@ -77,6 +79,7 @@ def _as_product(row) -> dict:
     }
 
 
+@observe(name="get_product", as_type="tool")
 def get_product(conn: Connection, model_or_family: str) -> dict:
     """Return ``{"query", "matched_by", "products": [...]}`` for a model or family lookup.
 

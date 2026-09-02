@@ -20,13 +20,15 @@ gate drops it with the drafted text (LLD-RT-05).
 
 from __future__ import annotations
 
-from urllib.parse import unquote, urlsplit
-
 from agentkit.runtime.agents.base import AgentOutput, compose_grounded_answer
 from agentkit.runtime.agents.faq_company import _kind_for
 from agentkit.runtime.grounding import used_documents
 from agentkit.runtime.language import english_query
 from agentkit.runtime.ops import MessageRecord
+
+# The URL→title fallback now lives with the sources resolver; re-exported here so callers
+# (and the download-card builder below) keep importing it from this module.
+from agentkit.runtime.sources import title_from_url
 
 # At most this many download cards on a single answer (a generic catalogue ask).
 _MAX_CARDS = 3
@@ -48,17 +50,6 @@ def _wants_document(text: str) -> bool:
 
 def _is_downloadable(url: str | None) -> bool:
     return bool(url) and url.lower().split("?", 1)[0].rstrip("/").endswith(_DOWNLOADABLE_EXTS)
-
-
-def title_from_url(url: str | None) -> str:
-    """A readable document label from its URL basename (decoded, extension stripped)."""
-    if not url:
-        return "Document"
-    name = unquote(urlsplit(url).path.rsplit("/", 1)[-1])
-    for ext in (".pdf", ".html", ".php", ".htm"):
-        if name.lower().endswith(ext):
-            name = name[: -len(ext)]
-    return name.strip() or "Document"
 
 
 def _document_card(chunk: dict) -> MessageRecord:

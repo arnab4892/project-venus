@@ -6,11 +6,14 @@ Products are presented by their runtime display name (family + variant when unna
 
 from __future__ import annotations
 
+from agentkit.runtime.tracing import observe
+
 from sqlalchemy import Connection, text
 
 from agentkit.tools.get_product import product_display_name
 
 
+@observe(name="list_products", as_type="tool")
 def list_products(conn: Connection, division: str, category: str | None = None) -> dict:
     """Return ``{"division", "families": [{family_id, name, category, products: [...]}]}``."""
     params: dict[str, object] = {"division": division}
