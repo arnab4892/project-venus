@@ -78,6 +78,31 @@ It talks to the same self-hosted LLM/embedding servers and Postgres as the CLI. 
 be busy with golden-suite runs from another session — **do not restart or reconfigure any
 server**; just retry if a turn is slow.
 
+### Optional: Langfuse turn tracing (dev-only)
+
+Turn-level observability (per-turn trace with node + tool + LLM spans, tokens/latency, and
+`turn_id`/`session_id`/`prompt_ids` metadata) against an **existing external self-hosted
+Langfuse (v4)**. The instance is **not** part of this repo — no docker-compose/deploy files
+here; the app only integrates the SDK (`runtime/tracing.py`).
+
+```bash
+uv pip install -e '.[ui,dev,dev-obs]'   # dev-obs adds langfuse (4.x, OTel-based)
+```
+
+Set the three vars in `.env` (see `.env.example`), then run the dev UI as above:
+
+```bash
+LANGFUSE_HOST=...  LANGFUSE_PUBLIC_KEY=...  LANGFUSE_SECRET_KEY=...
+JYOTECH_DEV_UI=1 python -m apps.dev_ui
+```
+
+- Tracing activates **only** when all three `LANGFUSE_*` are set **and** `JYOTECH_DEV_UI=1`
+  (a structural, code-enforced gate — production tracing is a later, deliberate decision).
+- **Unset `LANGFUSE_*` → tracing fully off, zero overhead.** An unreachable/misconfigured
+  Langfuse is fail-open: a turn never delays or breaks.
+- Tracing is **force-disabled** for eval runs, the `prompt`/`release activate` gates and
+  pytest — enforced in code, not by convention (those run turns in a rolled-back savepoint).
+
 ### Tests
 
 The adapter layer (`apps/harness.py`) is unit-tested with the turn function mocked (no

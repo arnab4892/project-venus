@@ -45,7 +45,20 @@ class RuntimeClient:
 
     def _openai(self) -> Any:
         if self._client is None:  # pragma: no cover - exercised only with a live endpoint
-            from openai import OpenAI
+            # Dev-only: when tracing is enabled, use langfuse's drop-in OpenAI wrapper so each
+            # runtime chat call carries tokens/latency as a generation span under the turn's trace.
+            # Fail-open: any import problem falls back to the plain SDK, so a turn never breaks.
+            OpenAI = None
+            try:
+                from agentkit.runtime.tracing import ensure_configured, tracing_enabled
+
+                if tracing_enabled():
+                    ensure_configured()  # bridge LANGFUSE_* from .env into os.environ for the SDK
+                    from langfuse.openai import OpenAI
+            except Exception:  # noqa: BLE001 - never let tracing wiring break the runtime client
+                OpenAI = None
+            if OpenAI is None:
+                from openai import OpenAI
 
             self._client = OpenAI(base_url=self.base_url, api_key=self.api_key or "not-needed")
         return self._client
