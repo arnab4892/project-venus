@@ -8,6 +8,8 @@ through it.
 
 from __future__ import annotations
 
+from agentkit.runtime.tracing import observe
+
 from sqlalchemy import Connection, text
 
 _COLS = (
@@ -27,6 +29,7 @@ def _head_office(conn: Connection) -> dict | None:
     return dict(row) if row else None
 
 
+@observe(name="get_office", as_type="tool")
 def get_office(
     conn: Connection,
     *,

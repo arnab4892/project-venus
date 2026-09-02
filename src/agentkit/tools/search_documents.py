@@ -12,6 +12,8 @@ a chunk matches a division if any of its families is in that division.
 
 from __future__ import annotations
 
+from agentkit.runtime.tracing import observe
+
 from sqlalchemy import Connection, text
 
 from agentkit.config import Settings, get_settings
@@ -39,6 +41,7 @@ def _prefilter(division: str | None, family_ids: list[str] | None) -> tuple[str,
     return (" AND ".join(clauses) if clauses else "TRUE"), params
 
 
+@observe(name="search_documents", as_type="tool")
 def search_documents(
     conn: Connection,
     query: str,

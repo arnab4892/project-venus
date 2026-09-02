@@ -6,9 +6,12 @@ Return the company facts of a given kind (``certification``, ``founded``, ``cove
 
 from __future__ import annotations
 
+from agentkit.runtime.tracing import observe
+
 from sqlalchemy import Connection, text
 
 
+@observe(name="get_company_fact", as_type="tool")
 def get_company_fact(conn: Connection, kind: str) -> dict:
     """Return ``{"kind", "facts": [{fact_id, value, detail, source_doc_id, source_locator}]}``."""
     rows = conn.execute(

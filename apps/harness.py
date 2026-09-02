@@ -107,46 +107,20 @@ def render_messages(messages: list[dict]) -> str:
 
 
 def build_sources(result: Any) -> list[dict]:
-    """Deduplicated Sources rows from a RunResult (citations enriched with card titles).
+    """The customer-facing Sources rows for a turn.
 
-    Citations carry ``kind/ref_id/locator/url`` but no friendly display name; document
-    names live in ``document_card`` payloads. We join on url (falling back to locator)
-    and dedupe on url, else on ``(kind, ref_id)``.
+    The runtime resolver (``agentkit.runtime.sources.resolve_sources``) already ran inside the
+    turn and stored its ``{title, url, link, location, kind}`` list on the answer message's
+    payload (``payload["sources"]``) — the same list persisted to ``ops.message`` and shown to the
+    customer. We simply surface it here; the harness stays DB-free and does not re-resolve.
+    Non-answer turns (clarify/deflect/slot) carry no sources → ``[]``.
     """
-    titles: dict[str, str] = {}
     for m in getattr(result, "messages", None) or []:
-        if m.get("kind") == "document_card":
-            pl = m.get("payload") or {}
-            title = pl.get("title")
-            if pl.get("url"):
-                titles.setdefault(str(pl["url"]), title or "")
-            if pl.get("locator"):
-                titles.setdefault(str(pl["locator"]), title or "")
-
-    rows: list[dict] = []
-    seen: set = set()
-    for c in getattr(result, "citations", None) or []:
-        url = c.get("url")
-        key = url or (c.get("kind"), c.get("ref_id"))
-        if key in seen:
-            continue
-        seen.add(key)
-        name = (
-            titles.get(str(url))
-            or titles.get(str(c.get("locator")))
-            or c.get("locator")
-            or c.get("ref_id")
-        )
-        rows.append(
-            {
-                "name": name,
-                "kind": c.get("kind"),
-                "ref_id": c.get("ref_id"),
-                "locator": c.get("locator"),
-                "url": url,
-            }
-        )
-    return rows
+        payload = m.get("payload") or {}
+        sources = payload.get("sources")
+        if sources:
+            return list(sources)
+    return []
 
 
 def build_trace(result: Any) -> str:

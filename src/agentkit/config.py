@@ -104,6 +104,14 @@ class Settings(BaseSettings):
     # Outbound email relay (handoff dispatch, LLD-HO-04)
     smtp_url: str = "smtp://user:pass@smtp.internal:587"
 
+    # Dev-only Langfuse tracing (dev tooling; see runtime/tracing.py). Points at an EXISTING
+    # external self-hosted Langfuse instance — no infra in this repo. All three unset → tracing
+    # is fully off (zero overhead). Tracing additionally requires JYOTECH_DEV_UI=1 and is
+    # force-disabled for eval / gate / pytest, both enforced in code.
+    langfuse_host: str = ""
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+
     def extractor_endpoint(self) -> tuple[str, str, str]:
         """Resolve the extractor ``(base_url, model, api_key)``.
 

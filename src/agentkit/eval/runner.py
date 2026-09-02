@@ -316,6 +316,14 @@ def run_eval(
     ``layers`` selects which layers execute (a dev run may drop ``e2e`` explicitly). e2e uses
     the real orchestrator with the ``complete`` runtime-LLM seam + ``embed`` seam.
     """
+    # Dev-only Langfuse tracing is force-disabled for every eval path — this covers `eval run`
+    # and both golden-gated activations (`prompt activate`, `release activate`), which all route
+    # through here. Enforced in code, not by convention: eval turns run in a rolled-back savepoint,
+    # so their traces would reference ops rows that never commit; the eval report is the record.
+    from agentkit.runtime.tracing import force_off
+
+    force_off()
+
     settings = settings or get_settings()
     gas_aliases = gas_alias_map(client)
     if questions is None:

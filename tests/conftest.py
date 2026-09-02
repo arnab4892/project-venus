@@ -25,6 +25,18 @@ from agentkit.config import get_settings
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _tracing_off() -> None:
+    """Force Langfuse tracing off for the whole test run, regardless of any LANGFUSE_*/env.
+
+    Enforced in code, not by convention: tests must never emit traces (they run turns in
+    rolled-back savepoints, exactly like the eval runner).
+    """
+    from agentkit.runtime.tracing import force_off
+
+    force_off()
+
+
 def _db_reachable(url: str) -> bool:
     try:
         eng = create_engine(url)

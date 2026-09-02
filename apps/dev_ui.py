@@ -188,22 +188,21 @@ def _build_seams() -> tuple[Callable[[], Any], Callable[[Any, str], Any]]:
 
 
 def _sources_markdown(sources: list[dict] | None) -> str:
+    """Render the customer-facing sources: 'title — location' as the link text.
+
+    Each row is ``{title, url, link, location, kind}`` from ``resolve_sources``. The link text is
+    the title plus its readable location (page + section for a PDF, the section label for a web
+    page); a row with no ``link`` (null url) renders as plain text.
+    """
     if not sources:
         return "_No sources cited for this turn._"
     lines = []
     for s in sources:
-        name = s.get("name") or s.get("ref_id") or "(source)"
-        url = s.get("url")
-        kind = s.get("kind")
-        loc = s.get("locator")
-        label = f"**{name}**"
-        if kind:
-            label += f" · `{kind}`"
-        if loc:
-            label += f" — {loc}"
-        if url:
-            label += f" — [{url}]({url})"
-        lines.append(f"- {label}")
+        title = s.get("title") or "(source)"
+        location = s.get("location")
+        link = s.get("link")
+        text = f"{title} — {location}" if location else title
+        lines.append(f"- [{text}]({link})" if link else f"- {text}")
     return "\n".join(lines)
 
 

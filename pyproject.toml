@@ -46,6 +46,12 @@ dev = [
 ui = [
     "gradio>=5,<6",
 ]
+# Dev-only turn tracing (runtime/tracing.py) against an EXISTING external self-hosted Langfuse
+# (v4 server). SDK only — no Langfuse infra lives in this repo. Not part of the shipped wheel;
+# pinned to the current langfuse major (4.x, OTel-based). Unset LANGFUSE_* → tracing fully off.
+dev-obs = [
+    "langfuse>=4.15,<5",
+]
 
 [project.scripts]
 agentkit = "agentkit.cli:app"

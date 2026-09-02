@@ -38,7 +38,23 @@ def _fake_result() -> SimpleNamespace:
         route="application_discovery",
         grounding={"status": "full", "grounded": True},
         messages=[
-            {"role": "assistant", "kind": "text", "text": FINAL_TEXT, "payload": None},
+            {
+                "role": "assistant",
+                "kind": "text",
+                "text": FINAL_TEXT,
+                # The runtime resolver already ran and stored the customer-facing sources here.
+                "payload": {
+                    "sources": [
+                        {
+                            "title": "Catalogue – Process",
+                            "url": "https://jyotech.com/process.pdf",
+                            "link": "https://jyotech.com/process.pdf#page=4",
+                            "location": "p. 4 — Process Compressors",
+                            "kind": "pdf",
+                        }
+                    ]
+                },
+            },
             {
                 "role": "assistant",
                 "kind": "document_card",
@@ -168,24 +184,37 @@ def test_stream_turn_yields_status_then_tokens_then_final():
     assert "match_capability" in final.trace
     assert "rows=`1`" in final.trace
 
-    # sources present and deduped on the terminal update
+    # the customer-facing sources (resolved at runtime, carried on the answer payload) surface
     assert final.sources
-    assert any(s["ref_id"] == "cap.002" for s in final.sources)
+    assert any(s["title"] == "Catalogue – Process" for s in final.sources)
 
 
-# --- sources dedup ---------------------------------------------------------
+# --- sources (read from the runtime-resolved answer payload) ---------------
 
 
-def test_build_sources_dedupes_url_and_uses_card_title():
+def test_build_sources_reads_resolved_payload():
     rows = build_sources(_fake_result())
 
-    # the two citations sharing the process.pdf url collapse to a single row
-    pdf_rows = [r for r in rows if r["url"] == "https://jyotech.com/process.pdf"]
-    assert len(pdf_rows) == 1
-    # the friendly name comes from the document_card payload title
-    assert pdf_rows[0]["name"] == "Process Compressors"
-    # the url-less capability citation is kept as its own row
-    assert any(r["ref_id"] == "cap.002" and r["url"] is None for r in rows)
+    # build_sources surfaces the resolver's list verbatim from the answer message payload —
+    # it does not re-derive from citations or document_card titles.
+    assert rows == [
+        {
+            "title": "Catalogue – Process",
+            "url": "https://jyotech.com/process.pdf",
+            "link": "https://jyotech.com/process.pdf#page=4",
+            "location": "p. 4 — Process Compressors",
+            "kind": "pdf",
+        }
+    ]
+
+
+def test_build_sources_empty_without_payload_sources():
+    result = SimpleNamespace(
+        messages=[{"role": "assistant", "kind": "text", "text": "hi", "payload": None}],
+        citations=[{"kind": "capability", "ref_id": "cap.002", "locator": None, "url": None}],
+    )
+    # No resolved sources on the payload (e.g. a clarify/deflect turn) → nothing to show.
+    assert build_sources(result) == []
 
 
 # --- error path ------------------------------------------------------------
