@@ -43,6 +43,13 @@ Follow-up (typewriter pacing): the submit handler already yielded per TOKEN, but
 paint. Added a `token_delay` (default 0.03 s, slept after each TOKEN) so Gradio repaints
 word-by-word; tests pass `token_delay=0` to stay fast (they assert ordering, not timing).
 
+Follow-up (sticky stage trail): `_status()` re-derived the label from `next(src)` every poll, so an
+empty poll reverted to the generic line and each label flashed for ~one poll then vanished. Labels
+are now **sticky** and accumulate into a trail — completed stages prefixed `✓`, the current one last
+with the ticking timer (`✓ Understanding your question · ✓ Finding the right specialist · Looking
+into it… (8s)`); the generic line shows only before the first label. Adapter tests cover the sticky
+hold across empty polls and the completed/current trail transition.
+
 **Tests:** `tests/runtime/test_on_stage_labels.py` (labels recorded in node order; default-None is
 inert) and two additions to `tests/apps/test_dev_ui_adapter.py` (the queue iterator's
 reusable-after-empty behaviour; the `stage_source` STATUS branch, previously untested).

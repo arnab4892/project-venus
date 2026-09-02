@@ -14,6 +14,7 @@ from apps.harness import (
     FINAL,
     STATUS,
     TOKEN,
+    _GENERIC_STATUS,
     build_sources,
     get_or_create_session,
     stream_turn,
@@ -244,35 +245,72 @@ def test_queue_stages_iterator_is_reusable_across_empty_reads():
     assert next(it) == "three"
 
 
-def test_stream_turn_status_updates_come_from_stage_source():
-    """When a stage_source is supplied, STATUS updates carry its labels in order."""
+def test_stage_label_is_sticky_across_empty_polls():
+    """A label held once stays shown on every subsequent poll — an empty queue never reverts."""
+    import queue
     import threading
 
-    labels = ["Understanding your question", "Finding the right specialist", "Looking into it"]
+    from apps.dev_ui import _QueueStages
+
+    q: "queue.Queue[str]" = queue.Queue()
+    q.put("Understanding your question")  # one label, then the queue sits empty for many polls
     provider, _ = _counting_provider()
-    state: dict = {}
     release = threading.Event()
 
     def turn_runner(session_id, message):
-        # Keep the worker alive long enough for the poller to drain several labels.
+        release.wait(timeout=2)  # keep the worker alive across several empty polls
+        return _fake_result()
+
+    statuses: list[str] = []
+    for up in stream_turn(
+        "hello", {}, turn_runner=turn_runner, session_provider=provider,
+        stage_source=_QueueStages(q), poll=0.01, token_delay=0,
+    ):
+        if up.kind == STATUS:
+            statuses.append(up.status)
+            if len(statuses) >= 5:
+                release.set()
+
+    # every status carries the single label — and never the generic line (it is sticky)
+    assert len(statuses) >= 5
+    assert all("Understanding your question" in s for s in statuses)
+    assert all(_GENERIC_STATUS not in s for s in statuses)
+
+
+def test_stage_trail_marks_completed_and_current():
+    """A second label pushes the first into the completed trail (✓); the newest is current."""
+    import queue
+    import threading
+
+    from apps.dev_ui import _QueueStages
+
+    q: "queue.Queue[str]" = queue.Queue()
+    q.put("Understanding your question")
+    provider, _ = _counting_provider()
+    release = threading.Event()
+    sent_second = {"done": False}
+
+    def turn_runner(session_id, message):
         release.wait(timeout=2)
         return _fake_result()
 
     statuses: list[str] = []
     for up in stream_turn(
-        "hello",
-        state,
-        turn_runner=turn_runner,
-        session_provider=provider,
-        stage_source=iter(labels),
-        poll=0.01,
-        token_delay=0,
+        "hello", {}, turn_runner=turn_runner, session_provider=provider,
+        stage_source=_QueueStages(q), poll=0.01, token_delay=0,
     ):
         if up.kind == STATUS:
             statuses.append(up.status)
-            if len(statuses) >= len(labels):
+            if len(statuses) >= 3 and not sent_second["done"]:
+                q.put("Finding the right specialist")  # a later stage arrives
+                sent_second["done"] = True
+            if sent_second["done"] and "Finding the right specialist" in up.status:
                 release.set()
 
-    # the status stream begins with the fed labels, in node order (extras, if any, are the
-    # generic fallback line emitted once the source is exhausted — never a reordered label)
-    assert statuses[: len(labels)] == labels
+    # the first status shows just the current stage — no completed marker yet
+    assert "Understanding your question" in statuses[0]
+    assert "✓" not in statuses[0]
+    # once the second stage arrives, the first is completed (✓) and the second is current
+    with_second = [s for s in statuses if "Finding the right specialist" in s]
+    assert with_second, "expected the second label to appear in the trail"
+    assert all("✓ Understanding your question" in s for s in with_second)
