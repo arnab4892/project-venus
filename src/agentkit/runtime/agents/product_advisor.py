@@ -84,7 +84,13 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
         if products:
             structured_rec = rec
             scope_family = products[0]["family_id"]
-    elif division is not None:
+    # Fall back to the division listing whenever no product resolved — a generic ask (null name)
+    # OR a name get_product cannot match (e.g. "hydrogen fuelling systems", a family carrying no
+    # product rows). This is NOT an `elif`: without the fallback an unresolved name leaves the
+    # answer with no structured product/family source, so the family id is grounded only if the
+    # compose LLM happens to list it — which it intermittently omits (cap-hydrogen-fuelling flake).
+    # The listing record is force-cited below, guaranteeing the family is grounded either way.
+    if structured_rec is None and division is not None:
         rec = tools.list_products(division)
         if rec.result.get("families"):
             structured_rec = rec

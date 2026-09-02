@@ -140,14 +140,33 @@ yields two cards and cites both. **Golden:** `docs-both-catalogues` — "What ca
 for download?", `expected_source_ids` includes **both** `doc.jyotech_catalog_process` and
 `doc.jyotech_catalog_f_s`.
 
-**Gate note (pre-existing flaky golden, unrelated to this change):** the confirming
+**Gate note (pre-existing flaky golden — now fixed, see below):** the confirming
 `agentkit eval run jyotech` reported `docs-both-catalogues` **pass** and every source-voice golden
-pass, with one failure — `cap-hydrogen-fuelling` `missing sources ['fam.hydrogen_fuelling_system']`.
-That family is derived from the `get_product` citation, a path this change does not touch (the
-change only *adds* document citations in the `search_documents` branch, subset-safe); the question
-passed in the prior full run and **3/3 live reruns cite the family**. It is compose nondeterminism
-(the LLM occasionally cites only the document search, not the `get_product` family row) — tracked
-separately, not a regression from this work.
+pass, with one failure — `cap-hydrogen-fuelling` `missing sources ['fam.hydrogen_fuelling_system']`
+— which was a pre-existing flake unrelated to the multi-card change (the family is derived from the
+`get_product`/`list_products` citation, not the `search_documents` branch this change touched). It
+is fixed in the follow-up below.
+
+## Follow-up — product_advisor: always ground the product/family source (fixes cap-hydrogen-fuelling)
+
+**Root cause:** product_advisor already force-cites its structured lookup (`structured_rec.tr_id`,
+mirroring application_discovery's match force-cite) — but only when one *ran*. The lookup was an
+`if get_product(...) / elif list_products(division)` chain: when the parse extracted a family name
+`get_product` **cannot resolve** (e.g. "Hydrogen Fuelling Systems" — a family with no product rows;
+`get_product` returns `[]`), the `if` branch was taken, `structured_rec` stayed `None`, and the
+`elif` listing fallback was **skipped**. The answer then carried no structured product/family
+source, so the family id was grounded only if the compose LLM happened to name it — which it
+intermittently omitted. (When the parse returned null, the `list_products` path ran and the family
+was grounded, which is why the question usually passed.)
+
+**Fix (code-only, no prompt/gate change):** the `elif` became a separate fallback —
+`if structured_rec is None and division is not None: list_products(division)` — so an unresolved
+name (or a null name) always yields a force-cited listing record. `list_products("industrial")`
+carries `fam.hydrogen_fuelling_system`, so the family is now grounded on every path.
+
+**Tests** (`tests/agents/test_product_advisor.py`): a get_product-backed answer whose compose cites
+only the chunk still emits the **product + family** citations (the force-cite guarantee); an
+unresolvable name falls back to `list_products` and still grounds a **family** citation.
 
 ## Goldens
 

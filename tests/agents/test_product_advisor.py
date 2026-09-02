@@ -10,8 +10,13 @@ import json
 
 from tests.runtime._helpers import FakeLLM
 
+from agentkit.config import Settings
+from agentkit.retrieval.chunk import Chunk
+from agentkit.retrieval.embed import embed_chunks
 from agentkit.runtime.orchestrator import run_turn
 from sqlalchemy import text
+
+_SETTINGS = Settings(embed_dim=3, embed_batch=64, embed_model="bge-m3")
 
 
 def _tool_results(conn, sid, tool):
@@ -101,6 +106,66 @@ def test_null_model_presented_by_family_and_variant(seeded_conn, make_ctx, new_s
     names = [p["display_name"] for p in prods]
     assert "Diaphragm Compressor — high-pressure" in names
     assert "" not in names and None not in names
+
+
+def test_get_product_family_force_cited_when_compose_cites_only_chunk(
+    seeded_conn, make_ctx, new_session
+):
+    # The get_product row + its family must be grounded even when the compose LLM cites ONLY the
+    # supporting chunk (never the structured row) — product_advisor force-cites the get_product
+    # record, mirroring application_discovery's match force-cite (LLD-AG-02).
+    fam = seeded_conn.execute(text(
+        "SELECT family_id FROM facts.product WHERE release_id='r2026.08.1' AND product_id='prd.mch6'"
+    )).scalar_one()
+    doc_id = seeded_conn.execute(text(
+        "SELECT doc_id FROM facts.document WHERE release_id='r2026.08.1' AND doc_id='doc.fs'"
+    )).scalar_one()
+    embed_chunks(
+        seeded_conn,
+        [Chunk("ch.mch.0", doc_id, "§MCH", ["MCH"],
+               "MCH-6 portable breathing air compressor", 8, [fam], "mch")],
+        "r2026.08.1", embed=lambda t: [[1.0, 0.0, 0.0] for _ in t], settings=_SETTINGS,
+    )
+    fake = FakeLLM({
+        "triage": {"division": "fire_rescue", "intent": "product_question", "language": "en",
+                   "in_scope": True, "pii_present": False, "confidence": 0.95},
+        "product_query": {"model_or_family": "MCH-6", "is_price_or_leadtime": False,
+                          "search_query": "MCH-6 breathing air compressor"},
+        # cites ONLY the search chunk (tr2), never the get_product row (tr1)
+        "answer": {"message": "The MCH-6 is a portable breathing air compressor [tr2].",
+                   "citations": ["tr2"]},
+    })
+    ctx = make_ctx(fake, embed=lambda t: [[1.0, 0.0, 0.0]], settings=_SETTINGS)
+    sid = new_session()
+    result = run_turn(ctx, sid, "Tell me about the MCH-6.")
+
+    assert result.outcome == "answered"
+    kinds = {c["kind"] for c in result.citations}
+    # product + family come from the force-cited get_product row, not the compose citation
+    assert "product" in kinds and "family" in kinds
+
+
+def test_unresolved_name_falls_back_to_list_products_for_family_citation(
+    seeded_conn, make_ctx, new_session
+):
+    # cap-hydrogen-fuelling flake: a family name get_product cannot resolve (a family with no
+    # product rows) must fall back to the division listing so the family is still grounded — not
+    # left to the compose LLM to remember. Here compose cites nothing; the family is force-cited
+    # from the list_products fallback.
+    fake = FakeLLM({
+        "triage": {"division": "industrial", "intent": "product_question", "language": "en",
+                   "in_scope": True, "pii_present": False, "confidence": 0.95},
+        "product_query": {"model_or_family": "Zzz Nonexistent Range 9000",
+                          "is_price_or_leadtime": False, "search_query": "nonexistent range"},
+        "answer": {"message": "We make a range of industrial compressors.", "citations": []},
+    })
+    ctx = make_ctx(fake)
+    sid = new_session()
+    result = run_turn(ctx, sid, "Tell me about your industrial range.")
+
+    assert result.outcome == "answered"
+    kinds = {c["kind"] for c in result.citations}
+    assert "family" in kinds  # force-cited from the list_products fallback, despite an empty compose cite
 
 
 def test_price_ask_routes_to_handoff_no_number(seeded_conn, make_ctx, new_session):
