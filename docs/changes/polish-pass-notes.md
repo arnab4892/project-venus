@@ -106,12 +106,56 @@ in-prompt leaks):
 `after_sales_intake.md` and `commercial_routing.md` had no per-file leaks and receive the rule via
 the shared persona bump only.
 
+## Follow-up — documents_compliance: one card per referenced document (rule-6 flag)
+
+**Bug:** a generic catalogue ask ("what product documents do you have?") produced prose naming
+**both** catalogues (PROCESS and F&S) and promising "cards below" (plural), but only **one**
+`document_card` was emitted — the 5b design carded the single top-ranked document, which is right
+for a specific ask and wrong for a generic one.
+
+**Fix (agent/tool composition within LLD-AG-03 — no LLD.md edit, flagged here for the next doc
+pass):**
+- `runtime/grounding.py` gains `used_documents(chunks, answer_text, cap=None)` — the multi-document
+  generalisation of `_best_chunk`: the distinct documents (by `doc_id`, retrieval order) whose
+  chunks the answer actually used (overlap ≥ 2 distinctive tokens; falls back to the single best
+  chunk, never zero). The `search_documents` citation derivation now cites **each** used document,
+  not just the best chunk — so a generic catalogue answer cites every catalogue it drew on (a
+  specific answer still cites exactly one). Extra citations are subset-safe for goldens.
+- `runtime/agents/documents_compliance.py` emits one `document_card` **per distinct downloadable
+  document the answer references** (`used_documents`, filtered to file URLs — `.pdf` etc. — so a
+  retrieved HTML listing page never becomes a bogus download; deduped, retrieval order, capped at
+  3). Retrieval `k` raised to 10 so a generic ask surfaces every catalogue, not just the top hit.
+  The compose instruction ties prose to cards (name a catalogue ⇒ a card; singular/plural to match
+  the count). A specific single-document ask still yields exactly one card.
+
+**Result (live):** *"What catalogues do you have for download?"* → two cards (F&S + PROCESS), prose
+names both with "cards below", both catalogue documents cited. *"Do you have a fire equipment
+catalogue?"* → one card, singular prose. Cards remain on the grounded answer path (`extra_messages`,
+dropped with a failed draft).
+
+**Tests:** `tests/runtime/test_citations.py` — `used_documents` (each referenced doc in order;
+dedupe + cap; single-reference → one; no-overlap fallback; both docs cited). `tests/agents/
+test_documents.py::test_generic_catalogue_ask_serves_one_card_per_document` — a two-catalogue turn
+yields two cards and cites both. **Golden:** `docs-both-catalogues` — "What catalogues do you have
+for download?", `expected_source_ids` includes **both** `doc.jyotech_catalog_process` and
+`doc.jyotech_catalog_f_s`.
+
+**Gate note (pre-existing flaky golden, unrelated to this change):** the confirming
+`agentkit eval run jyotech` reported `docs-both-catalogues` **pass** and every source-voice golden
+pass, with one failure — `cap-hydrogen-fuelling` `missing sources ['fam.hydrogen_fuelling_system']`.
+That family is derived from the `get_product` citation, a path this change does not touch (the
+change only *adds* document citations in the `search_documents` branch, subset-safe); the question
+passed in the prior full run and **3/3 live reruns cite the family**. It is compose nondeterminism
+(the LLM occasionally cites only the document search, not the `get_product` family row) — tracked
+separately, not a regression from this work.
+
 ## Goldens
 
 `clients/jyotech/golden/questions.yaml` — added `must_not_contain: ["Source:", "catalog",
 "catalogue", "page)"]` to three questions that do **not** ask about documents:
 `co-certifications`, `faq-api618` (appended to its existing absence guards), and `prod-mch16-specs`.
 The `docs-*` questions were deliberately left untouched (they legitimately discuss catalogues).
+Added `docs-both-catalogues` (see the multi-card follow-up above).
 
 ## Decisions taken
 

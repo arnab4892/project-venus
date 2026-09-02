@@ -536,6 +536,16 @@ questions:
       query: "fire rescue diving equipment breathing air compressors catalogue"
       expect_doc: doc.jyotech_catalog_f_s
 
+  - id: docs-both-catalogues
+    # A GENERIC catalogue-download ask spans BOTH catalogues — documents_compliance emits one
+    # download card per DISTINCT referenced document and cites each (LLD-AG-03 multi-card). Both
+    # docs in expected_source_ids forces both to be retrieved AND used by the compose step. This is
+    # a document ask, so naming the catalogues in prose is the allowed exception — no must_not_contain.
+    question: "What catalogues do you have for download?"
+    expected_answer_contains: ["catalog"]
+    expected_source_ids: ["doc.jyotech_catalog_process", "doc.jyotech_catalog_f_s"]
+    expected_outcome: answer
+
   - id: docs-truncation-canary
     question: "Are your smoke exhausters and PPV blowers AMCA certified?"
     expected_answer_contains: ["AMCA"]
