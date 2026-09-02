@@ -117,6 +117,8 @@ def test_full_turn_ships_fallback_not_fabrication(seeded_conn, make_ctx, new_ses
 
     assert result.grounding["status"] == "none"
     assert result.messages[-1]["text"] == FALLBACK_TEXT
+    # a gate-stripped turn is recorded as `fallback`, not `answered` (countable in ops)
+    assert result.outcome == "fallback"
     # the fabricated figure never reaches an ops.message
     persisted = seeded_conn.execute(
         text("SELECT text FROM ops.message WHERE session_id = :s AND role = 'assistant'"),

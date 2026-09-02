@@ -55,6 +55,9 @@ _OUTCOME_MAP = {
     "declined_oos": "out_of_scope",
     "deflected": "out_of_scope",
     "clarify": "clarify",
+    # A turn whose draft the grounding gate stripped (fallback sentence shipped) is its own
+    # outcome, distinct from a genuine answer (LLD-RT-05). No golden expects it today.
+    "fallback": "fallback",
 }
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]

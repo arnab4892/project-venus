@@ -63,3 +63,26 @@ in `eval/runner.py`:
 Tests (`tests/eval/test_runner.py`, scripting fail-then-pass via a FIFO `answer` queue): retry-pass →
 `flaky`, `report.ok` True, first-attempt evidence labelled; two failures → `fail`, gate blocks; a
 deterministic fact failure stays `fail` and never goes flaky.
+
+## Item 3 — outcome = `fallback` on gate strip [rule-6: LLD-RT-05 / LLD-EVAL-01]
+
+When the grounding gate strips a draft and ships the fallback sentence, the turn was previously
+recorded as `answered` — indistinguishable in ops monitoring from a real answer. Now it is recorded
+as its own outcome, `fallback`.
+
+- `runtime/orchestrator.py::n_ground`: the `GroundingResult.ok` flag already distinguishes a passing
+  answer from a stripped one, so the single unconditional `wf.outcome = "answered"` becomes
+  `"answered" if gr.ok else "fallback"`. Nothing else in the node changes (the sources block already
+  guards on `wf.citations`, empty on a stripped turn).
+- **No migration.** `ops.turn.outcome` is untyped `TEXT` with no CHECK constraint, so the value is
+  accepted as-is; `persist_turn` writes it unchanged. The trace (`cli.py::_print_trace`) and Gradio
+  harness display outcome via generic passthrough, so both learn `fallback` for free.
+- **Eval vocabulary** (`eval/runner.py::_OUTCOME_MAP`) gains `"fallback": "fallback"` so a fallback
+  turn maps into the golden vocabulary and never silently mismatches an expectation. The golden
+  header comment documents the new value.
+- **Golden audit — clean.** The 53 goldens expect only `{answer×47, handoff×3, out_of_scope×2,
+  asked_slot×1}`; none expect `fallback`, and turns that pass today never hit the strip path (a
+  stripped turn already fails `expected_answer_contains`), so no expectation was edited.
+
+Test: `tests/runtime/test_ungrounded_claims_removed.py::test_full_turn_ships_fallback_not_fabrication`
+now also asserts `result.outcome == "fallback"`.
