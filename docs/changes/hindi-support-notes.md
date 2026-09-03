@@ -20,10 +20,14 @@ strings language-aware, and adds a defensive digit-fold safety net + goldens.
 ## What changed
 
 ### 1. Persona + exemplars (prompt layer)
-- `clients/jyotech/prompts/_persona.md`: new `Language (Hindi — Devanagari):` register section
-  parallel to the Hinglish one. Same English-in-Latin-script rule for technical terms / units /
-  standards / product·family·model names; the one hard typographic rule is **figures ALWAYS in
-  ASCII digits (never Devanagari ०-९), Indian-grouped** (`25,000`).
+- `clients/jyotech/prompts/_persona.md`: new `Language (Hindi — Devanagari):` register section.
+  **Register (as hardened after a live-transcript pass — the first cut mirrored Hinglish and read as
+  "Hinglish-in-Devanagari"):** the reply is **written Hindi throughout**, technical vocabulary
+  transliterated as standard written Hindi does (कंप्रेसर, गैस, प्रेशर, कैपेसिटी). **Only three things
+  stay Latin** — (1) exact product/family/model/brand names as printed in the catalogue (bold,
+  matching the Sources panel), (2) units (Nm³/hr, bar, barg, kW, HP, lpm, …), (3) standard codes
+  (API-618, ISO, EN, NFPA). Ordinary English words in Latin are forbidden; figures stay ASCII digits,
+  Indian-grouped (`25,000`).
 - One Devanagari exemplar added to each of the six customer-facing agent prompts
   (application_discovery, product_advisor, documents_compliance, after_sales_intake,
   commercial_routing, faq_company), mirroring the existing English/Hinglish blockquote pairs and
@@ -89,6 +93,17 @@ residual only surfaces on the noted condition. **Recommended follow-up, highest 
 Not members of the class: `deflect.py` (reply is LLM-composed via `respond_in`; empty-string on
 failure is a separate degradation, not an English string) and `documents_compliance._document_card`
 (a structured card payload — title from the document, no prose).
+
+### Follow-up: the `hi` fixed templates predate the tightened register
+The five per-language templates converted in §2 were written under the *first* Hindi register (which
+mirrored Hinglish), so their `hi` variants are themselves **Hinglish-in-Devanagari** — they carry
+Latin loanwords outside the three exceptions (`engineers`, `commercial team`, `tailored solution`,
+`lead time`, `compressor range`, and the clarify/hiccup lists `gas`/`flow`/`discharge pressure`).
+The register-tightening pass was scoped **prompt-layer only**, so these deterministic code strings
+were left as-is. They should be re-authored to the written-Hindi three-exception rule (transliterate
+the technical vocab; keep only product names / units / standards Latin) in a follow-up — same files
+as §2. Lower urgency than the generated replies (they fire on fallback/handoff/degrade paths, not the
+main advisory flow), but they are a visible inconsistency once a customer hits one.
 
 ## Rule-6 flags (for the next doc pass)
 - **LLD-RT-07**: add the Hindi (Devanagari) register sentence (parallel to the Hinglish one) and note
