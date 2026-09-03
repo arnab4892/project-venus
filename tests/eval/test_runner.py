@@ -31,6 +31,11 @@ def test_normalize_digits():
     assert normalize_digits("25,000") == "25000"
     assert normalize_digits("25000.0") == "25000"
     assert normalize_digits("1,00,000.00") == "100000"
+    # Devanagari numerals fold to ASCII (safety net) so a Devanagari figure still matches an
+    # ASCII needle and can't slip past a must_not guard unnoticed (LLD-RT-07).
+    assert normalize_digits("२५,०००") == "25000"
+    assert text_contains("published up to २५,००० Nm3/hr", "25000")
+    assert text_contains("Capacity: २०,००० Nm3/hr", "20000")
 
 
 def test_markdown_bold_and_table_pipes_do_not_break_matching():

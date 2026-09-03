@@ -33,6 +33,35 @@ _SLOT_QUESTIONS = {
     "discharge_p": "What discharge pressure do you need (in bar)?",
 }
 
+# No-match handoff (stub, 5a) — a fixed, per-language template selected by the turn's detected
+# language (LLD-RT-07), mirroring commercial_routing's `_TEMPLATES`. Technical terms, units and the
+# visitor's own gas/capacity/pressure values stay English even in the hi/hinglish register.
+_NOMATCH_TEMPLATES = {
+    "en": (
+        "I can't confirm a published compressor range that covers {gas} at "
+        "{capacity} {capacity_unit} and {discharge_p} bar.{note} "
+        "I can connect you with our engineers for a tailored solution — shall I?"
+    ),
+    "hi": (
+        "मैं ऐसी कोई published compressor range पक्की नहीं कर पा रहा हूँ जो {gas} को "
+        "{capacity} {capacity_unit} और {discharge_p} bar पर cover करती हो।{note} "
+        "मैं आपको हमारे engineers से एक tailored solution के लिए जोड़ सकता हूँ — क्या मैं ऐसा करूँ?"
+    ),
+    "hinglish": (
+        "Main koi aisi published compressor range confirm nahi kar pa raha hoon jo {gas} ko "
+        "{capacity} {capacity_unit} aur {discharge_p} bar par cover karti ho.{note} "
+        "Main aapko hamare engineers se ek tailored solution ke liye jod sakta hoon — kya main aisa karun?"
+    ),
+}
+_NOMATCH_NOTE = {
+    "en": " We do make related machines whose published data I can't directly compare to your duty.",
+    "hi": " हम कुछ related machines भी बनाते हैं जिनका published data मैं सीधे आपकी duty से compare नहीं कर सकता।",
+    "hinglish": (
+        " Hum kuch related machines bhi banate hain jinka published data main seedhe aapki duty "
+        "se compare nahi kar sakta."
+    ),
+}
+
 # Regexes to detect that the message ALREADY states a flow-with-units and a pressure — used to
 # catch the slot LLM under-extracting a complete duty (structural slot-complete rule, LLD-AG-01).
 _CAP_RE = re.compile(
@@ -148,14 +177,14 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
     if not matches:
         # No published family whose comparable envelope contains the duty. Offer engineer review
         # (a stub in 5a — no ops.lead yet); mention non-comparable relatives in one line only.
-        note = (
-            " We do make related machines whose published data I can't directly compare to your "
-            "duty." if non_comparable else ""
-        )
-        msg = (
-            f"I can't confirm a published compressor range that covers {slots['gas']} at "
-            f"{slots['capacity']} {slots['capacity_unit']} and {slots['discharge_p']} bar.{note} "
-            "I can connect you with our engineers for a tailored solution — shall I?"
+        lang = language if language in _NOMATCH_TEMPLATES else "en"
+        note = _NOMATCH_NOTE[lang] if non_comparable else ""
+        msg = _NOMATCH_TEMPLATES[lang].format(
+            gas=slots["gas"],
+            capacity=slots["capacity"],
+            capacity_unit=slots["capacity_unit"],
+            discharge_p=slots["discharge_p"],
+            note=note,
         )
         return AgentOutput(
             action="handoff",

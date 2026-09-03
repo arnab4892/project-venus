@@ -187,3 +187,26 @@ def test_price_ask_routes_to_handoff_no_number(seeded_conn, make_ctx, new_sessio
     result = run_turn(ctx, sid, "What does the MCH-6 cost?")
     assert result.outcome == "handoff"
     assert not any(ch.isdigit() for ch in result.messages[0]["text"])
+
+
+def test_price_ask_hands_off_in_visitor_language(seeded_conn, make_ctx, new_session):
+    """A Hindi price ask hands off in Hindi, still with no figure (LLD-RT-07 + LLD-AG-05)."""
+    from agentkit.runtime.agents.product_advisor import _PRICE_HANDOFF_TEXTS
+
+    fake = FakeLLM(
+        {
+            "triage": {
+                "division": "fire_rescue", "intent": "product_question", "language": "hi",
+                "in_scope": True, "pii_present": False, "confidence": 0.9,
+            },
+            "product_query": {
+                "model_or_family": "MCH-6", "is_price_or_leadtime": True, "search_query": "MCH-6 price",
+            },
+        }
+    )
+    ctx = make_ctx(fake)
+    sid = new_session()
+    result = run_turn(ctx, sid, "MCH-6 ki keemat kya hai?")
+    assert result.outcome == "handoff"
+    assert result.messages[0]["text"] == _PRICE_HANDOFF_TEXTS["hi"]
+    assert not any(ch.isdigit() for ch in result.messages[0]["text"])

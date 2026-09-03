@@ -23,10 +23,24 @@ from agentkit.runtime.ops import MessageRecord
 from agentkit.runtime.schemas import PRODUCT_QUERY_SCHEMA
 from agentkit.runtime.triage import build_chat_messages
 
-_PRICE_HANDOFF = (
-    "We don't publish prices or lead times here, but I can connect you with our commercial "
-    "team who'll get you an accurate quotation — shall I?"
-)
+# Fixed, per-language price/lead-time handoff (LLD-RT-07), selected by detected language and
+# carrying no figure by construction. Deterministic + pre-vetted; technical terms stay English.
+_PRICE_HANDOFF_TEXTS = {
+    "en": (
+        "We don't publish prices or lead times here, but I can connect you with our commercial "
+        "team who'll get you an accurate quotation — shall I?"
+    ),
+    "hi": (
+        "हम यहाँ कीमत या lead time नहीं देते, लेकिन मैं आपको हमारी commercial team से जोड़ सकता हूँ "
+        "जो आपको एक accurate quotation देंगे — क्या मैं जोड़ूँ?"
+    ),
+    "hinglish": (
+        "Hum yahan price ya lead time nahi dete, lekin main aapko hamari commercial team se connect "
+        "kar sakta hoon jo aapko accurate quotation denge — kya main jodun?"
+    ),
+}
+# Back-compat alias (English is the historical constant).
+_PRICE_HANDOFF = _PRICE_HANDOFF_TEXTS["en"]
 
 # A focused extraction prompt (kept out of the compose prompt so the model returns a clean
 # lookup key, not a paraphrase). Reliable extraction is what lets get_product resolve a named
@@ -61,9 +75,10 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
 
     # Price / lead-time is commercial — never answer it here; hand off with no figure.
     if parse.get("is_price_or_leadtime"):
+        lang = language if language in _PRICE_HANDOFF_TEXTS else "en"
         return AgentOutput(
             action="handoff",
-            messages=[MessageRecord("assistant", "text", _PRICE_HANDOFF)],
+            messages=[MessageRecord("assistant", "text", _PRICE_HANDOFF_TEXTS[lang])],
             output={"action": "handoff", "lead_type": "commercial", "reason": "price_or_leadtime"},
         )
 

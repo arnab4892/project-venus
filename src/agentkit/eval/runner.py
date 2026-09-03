@@ -109,16 +109,20 @@ class EvalReport:
 
 _DIGIT_COMMA_RE = re.compile(r"(?<=\d),(?=\d)")
 _TRAILING_ZERO_RE = re.compile(r"(\d)\.0+(?!\d)")
+# Devanagari digits fold 1:1 to ASCII (safety net mirroring runtime/grounding.py) so a Devanagari
+# figure in an answer still matches an ASCII needle and can't slip past a must_not guard unnoticed.
+_DEVANAGARI_DIGITS = str.maketrans("०१२३४५६७८९", "0123456789")
 
 
 def normalize_digits(text: str) -> str:
     """Fold number typography so digit-group commas and spurious ``.0`` don't defeat matching.
 
-    ``25,000`` → ``25000``; ``25000.0`` → ``25000``. Applied to BOTH the answer and the needle so
-    an `expected_answer_contains` "25000" matches a formatted "25,000", and a `must_not_contain`
-    "20000" still catches "20,000".
+    ``25,000`` → ``25000``; ``25000.0`` → ``25000``; Devanagari ``२५,०००`` → ``25000``. Applied to
+    BOTH the answer and the needle so an `expected_answer_contains` "25000" matches a formatted
+    "25,000", and a `must_not_contain` "20000" still catches "20,000".
     """
-    t = _DIGIT_COMMA_RE.sub("", text or "")
+    t = (text or "").translate(_DEVANAGARI_DIGITS)
+    t = _DIGIT_COMMA_RE.sub("", t)
     return _TRAILING_ZERO_RE.sub(r"\1", t)
 
 
