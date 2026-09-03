@@ -32,6 +32,6 @@ Hinglish — "Jyotech ke paas kaunsi ISO certifications hain?":
 > Jyotech ke paas ISO 9001:2015, ISO 14001:2015 aur ISO 45001:2018 certifications hain. Aapko
 > certificate copies chahiye, ya accreditations ke baare mein kuch aur bata doon?
 
-Hindi (Devanagari) — "Jyotech के पास कौन सी ISO certifications हैं?":
-> Jyotech के पास ISO 9001:2015, ISO 14001:2015 और ISO 45001:2018 certifications हैं। आपको certificate
-> copies चाहिए, या accreditations के बारे में कुछ और बता दूँ?
+Hindi (Devanagari) — "**Jyotech** के पास कौन से ISO प्रमाणपत्र हैं?":
+> **Jyotech** के पास ISO 9001:2015, ISO 14001:2015 और ISO 45001:2018 प्रमाणपत्र हैं। क्या आपको
+> प्रमाणपत्र की प्रतियाँ चाहिए, या हमारी मान्यताओं के बारे में कुछ और बताऊँ?

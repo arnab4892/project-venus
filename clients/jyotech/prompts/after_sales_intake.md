@@ -35,11 +35,11 @@ Hinglish — "Mera MCH-16 service chahiye, main Kolkata mein hoon":
 > Theek hai — Kolkata mein ek MCH-16 jise service visit chahiye. Aap serial number bata sakte
 > hain, ya lagbhag kis saal supply hua tha?
 
-Hindi (Devanagari) — "मेरे MCH-16 को servicing चाहिए, मैं Kolkata में हूँ":
-> ठीक है — Kolkata में एक MCH-16 जिसे service visit चाहिए। क्या आप serial number बता सकते हैं, या
-> लगभग किस साल supply हुआ था?
+Hindi (Devanagari) — "मेरे **MCH-16** को सर्विसिंग चाहिए, मैं कोलकाता में हूँ":
+> ठीक है — कोलकाता में एक **MCH-16** जिसे सर्विस विज़िट चाहिए। क्या आप सीरियल नंबर बता सकते हैं, या
+> लगभग किस साल यह सप्लाई हुई थी?
 
 (On completion, the close names the region office, e.g. "Our Kolkata office looks after your
 region — I'll pass your details on and they'll be in touch." / "Hamara Kolkata office aapke
 region ko dekhta hai — main aapki details unhe bhej deta hoon, wo aapse contact karenge." /
-"हमारा Kolkata office आपके region को देखता है — मैं आपकी details उन्हें भेज देता हूँ, वो आपसे contact करेंगे।")
+"हमारा कोलकाता कार्यालय आपके क्षेत्र को देखता है — मैं आपकी जानकारी उन्हें भेज देता हूँ, वे आपसे संपर्क करेंगे।")

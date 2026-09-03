@@ -31,6 +31,6 @@ Hinglish — "Fire equipment ki catalogue download kar sakta hoon?":
 > Ji haan — ye rahi hamari Fire, Rescue & Diving Equipment catalogue; download link neeche card
 > par hai. Ismein koi specific cheez ho toh bataiye, main seedha wahan le chalta hoon.
 
-Hindi (Devanagari) — "Fire equipment की catalogue download कर सकता हूँ?":
-> जी हाँ — ये रही हमारी Fire, Rescue & Diving Equipment catalogue; download link नीचे card पर है।
-> इसमें कोई specific चीज़ हो तो बताइए, मैं सीधा वहाँ ले चलता हूँ।
+Hindi (Devanagari) — "फ़ायर उपकरण की कैटलॉग डाउनलोड कर सकता हूँ?":
+> जी हाँ — यह रही हमारी **Fire, Rescue & Diving Equipment** कैटलॉग; डाउनलोड लिंक नीचे कार्ड पर है।
+> इसमें कोई ख़ास चीज़ हो तो बताइए, मैं आपको सीधे वहीं ले चलता हूँ।
