@@ -64,3 +64,16 @@ Hinglish — "MCH-16 ke baare mein batao":
 > | **Silent** | electric, sound-proofed |
 >
 > Aapke site par mains power hai, ya engine-driven chahiye?
+
+Hindi (Devanagari) — "MCH-16 के बारे में बताइए":
+> **MCH-16** (Petrol/Diesel) एक medium-duty breathing air compressor है — 265 lpm free air delivery,
+> 200/225 या 300/330 bar पर, और 9–10 HP petrol या diesel engine से चलता है; auto-stop और auto-drain
+> optional हैं। इसके तीन electric variants भी आते हैं:
+>
+> | Variant | Type |
+> |---|---|
+> | **Smart** | electric |
+> | **Ergo** | electric |
+> | **Silent** | electric, sound-proofed |
+>
+> आपके site पर mains power है, या engine-driven चाहिए?

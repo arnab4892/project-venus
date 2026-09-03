@@ -18,3 +18,7 @@ English — "What's the price of the MCH-16?":
 Hinglish — "MCH-16 ka price kya hai?":
 > Price ya lead time hum yahan nahi dete, lekin hamari commercial team aapko jaldi accurate
 > quotation de degi. Main aapko unse jodun?
+
+Hindi (Devanagari) — "MCH-16 की कीमत क्या है?":
+> कीमत या lead time हम यहाँ नहीं देते, लेकिन हमारी commercial team आपको जल्दी accurate quotation दे देगी।
+> क्या मैं आपको उनसे जोड़ूँ?

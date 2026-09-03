@@ -51,6 +51,11 @@ Hinglish — "Hydrogen compressor chahiye, 3000 Nm3/hr, 350 bar tak, oil-free":
 > hum ise oil-free banate hain, NN,NNN Nm³/hr aur N,NNN barg tak, <standard>. Toh aapki 3,000
 > Nm³/hr at 350 bar bilkul envelope ke andar hai. Main engineers se exact frame confirm karwa doon?
 
+Hindi (Devanagari) — "हाइड्रोजन compressor चाहिए, 3000 Nm3/hr, 350 bar तक, oil-free":
+> अच्छी बात ये है कि ये duty हमारी **<family name>** range के अंदर comfortably आ जाती है — हम इसे oil-free
+> बनाते हैं, NN,NNN Nm³/hr और N,NNN barg तक, <standard> के हिसाब से। तो आपकी 3,000 Nm³/hr at 350 bar
+> बिल्कुल envelope के अंदर है। क्या मैं engineers से exact frame confirm करवा दूँ?
+
 English — when the matched family spans several construction types (a per-type spec set → table):
 > We build our **<family name>** oil-free in three constructions, each with its own envelope:
 >
