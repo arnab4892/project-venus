@@ -194,6 +194,7 @@ def build_request_kwargs(
     temperature: float | None = None,
     reasoning_effort: str | None = None,
     max_completion_tokens: int | None = None,
+    disable_thinking: bool = False,
 ) -> dict[str, Any]:
     """Assemble ``chat.completions.create`` kwargs, omitting any unset sampling param.
 
@@ -201,7 +202,9 @@ def build_request_kwargs(
     (kimi-k3 forbids ``temperature``, for instance) never receives it. The
     non-standard ``reasoning_effort`` value (kimi-k3 allows ``max``) is sent via
     ``extra_body`` so it lands verbatim in the request body regardless of the SDK's
-    typed enum. ``response_format`` is the strict ``json_schema`` shape unchanged.
+    typed enum. ``disable_thinking`` adds Qwen3/vLLM's thinking-off flag
+    (``chat_template_kwargs.enable_thinking=False``) into the SAME ``extra_body``.
+    ``response_format`` is the strict ``json_schema`` shape unchanged.
     """
     kwargs: dict[str, Any] = {
         "model": model,
@@ -215,8 +218,14 @@ def build_request_kwargs(
         kwargs["temperature"] = temperature
     if max_completion_tokens is not None:
         kwargs["max_completion_tokens"] = max_completion_tokens
+    # Both reasoning_effort and disable_thinking ride in extra_body — merge, never overwrite.
+    extra_body: dict[str, Any] = {}
     if reasoning_effort is not None:
-        kwargs["extra_body"] = {"reasoning_effort": reasoning_effort}
+        extra_body["reasoning_effort"] = reasoning_effort
+    if disable_thinking:
+        extra_body["chat_template_kwargs"] = {"enable_thinking": False}
+    if extra_body:
+        kwargs["extra_body"] = extra_body
     return kwargs
 
 

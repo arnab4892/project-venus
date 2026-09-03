@@ -8,7 +8,9 @@
 # layers against the LIVE active release. The e2e (agent-answer) layer is reported "pending"
 # until the agents land (milestone 5).
 #
-# expected_outcome ∈ {answer, asked_slot, handoff, refuse, out_of_scope}.
+# expected_outcome ∈ {answer, asked_slot, handoff, refuse, out_of_scope, fallback}.
+#   fallback = the grounding gate stripped the draft and shipped the fallback sentence
+#   (distinct from answer). No golden expects it today.
 # fact:      {tool, args, expect_ids}   — ids that MUST appear in the tool result
 # retrieval: {query?, division?, family_ids?, expect_doc|expect_locator|expect_chunk_ids}
 

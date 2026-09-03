@@ -275,7 +275,10 @@ def n_ground(state: _GState) -> dict:
                 wf.reply_messages.extend(out.extra_messages)
             wf.citations = gr.citations
             wf.grounding = gr.grounding
-            wf.outcome = "answered"
+            # A draft that fails the grounding gate is stripped and the fallback sentence ships
+            # (gr.ok False, gr.text == FALLBACK_TEXT). Record that honestly as `fallback`, not
+            # `answered`, so gate-stripped turns are countable in ops monitoring (LLD-RT-05).
+            wf.outcome = "answered" if gr.ok else "fallback"
             # Persist what the customer saw: attach the resolved customer-facing sources to the
             # answer message payload (ops.message.payload — no schema change). Fail-open: the
             # resolver only reads facts.* views, but a lookup failure must never break the turn —

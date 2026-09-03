@@ -59,6 +59,16 @@ def _view_exists(conn: Connection, schema: str, view: str) -> bool:
     ).first() is not None
 
 
+def _column_exists(conn: Connection, schema: str, table: str, column: str) -> bool:
+    return conn.execute(
+        text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_schema = :s AND table_name = :t AND column_name = :c"
+        ),
+        {"s": schema, "t": table, "c": column},
+    ).first() is not None
+
+
 def test_migration_roundtrip(monkeypatch):
     base = make_url(get_settings().database_url)
     admin_url = base.set(database="postgres")
@@ -111,6 +121,11 @@ def test_migration_roundtrip(monkeypatch):
                 "agent_invocation", "tool_call", "citation", "lead", "handoff_dispatch",
             ):
                 assert _table_exists(c, "ops", t), f"missing ops.{t}"
+            # 0005: staging timestamps on the mirrors + updated_at on the RC ledger.
+            assert _column_exists(c, "staging", "document", "created_at")
+            assert _column_exists(c, "staging", "document", "updated_at")
+            assert _column_exists(c, "staging", "capability_gas", "updated_at")
+            assert _column_exists(c, "staging", "release_candidate", "updated_at")
 
         # downgrade to base → 0001 tables gone and 0000 drops the schemas
         command.downgrade(cfg, "base")

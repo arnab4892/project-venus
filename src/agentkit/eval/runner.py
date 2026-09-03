@@ -41,6 +41,10 @@ from agentkit.tools.match_capability import match_capability
 from agentkit.tools.search_documents import search_documents
 
 PASS, FAIL, NA, PENDING, SKIP = "pass", "fail", "na", "pending", "skip"
+# e2e only: a question that failed once but passed on a single retry (LLD-EVAL-02). Counts as a
+# pass for the gate (EvalReport.ok) but stays visible in the report so live-LLM variance is never
+# hidden. Fact/retrieval are deterministic and never produce this status.
+FLAKY = "flaky"
 _ID_KEYS = {"cap_id", "family_id", "office_id", "product_id", "fact_id", "chunk_id"}
 
 # Orchestrator outcome → golden `expected_outcome` vocabulary (LLD-EVAL-01).
@@ -51,6 +55,9 @@ _OUTCOME_MAP = {
     "declined_oos": "out_of_scope",
     "deflected": "out_of_scope",
     "clarify": "clarify",
+    # A turn whose draft the grounding gate stripped (fallback sentence shipped) is its own
+    # outcome, distinct from a genuine answer (LLD-RT-05). No golden expects it today.
+    "fallback": "fallback",
 }
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -230,25 +237,23 @@ def _handoff_number_ok(result, question_text: str) -> tuple[bool, set]:
     return (not offending), offending
 
 
-def _e2e_layer(
+def _e2e_attempt(
     conn: Connection,
     q: dict,
     *,
     client: str,
-    complete: CompleteFn | None,
+    complete: CompleteFn,
     embed: EmbedFn | None,
     settings: Settings,
     gas_aliases: dict,
 ) -> LayerResult:
-    """Run the question through the real orchestrator and score the turn (LLD-EVAL-02).
+    """One e2e attempt: run the question through the real orchestrator and score the turn.
 
-    Runs inside a rolled-back savepoint so no ``ops.*`` row survives; the failing turn's answer
-    text / outcome / citations are captured into the detail **before** rollback (the only
-    record). Skipped when no runtime LLM (``complete``) is supplied.
+    Runs inside its own rolled-back savepoint so no ``ops.*`` row survives; the turn's answer
+    text / outcome / citations are captured into the detail **before** rollback (the report is
+    the only record). Returns a ``PASS``/``FAIL`` ``LayerResult`` — retry policy lives in the
+    caller.
     """
-    if complete is None:
-        return LayerResult("e2e", SKIP, "no runtime LLM (complete=) — e2e not evaluated")
-
     from agentkit.retrieval.chunk import resolve_active_release
     from agentkit.runtime.ops import create_session
     from agentkit.runtime.orchestrator import Ctx, run_turn
@@ -299,6 +304,48 @@ def _e2e_layer(
     if reasons:
         return LayerResult("e2e", FAIL, "; ".join(reasons) + " || " + evidence)
     return LayerResult("e2e", PASS, evidence)
+
+
+def _e2e_layer(
+    conn: Connection,
+    q: dict,
+    *,
+    client: str,
+    complete: CompleteFn | None,
+    embed: EmbedFn | None,
+    settings: Settings,
+    gas_aliases: dict,
+) -> LayerResult:
+    """Score the question end-to-end, retrying a failure ONCE (LLD-EVAL-02).
+
+    The e2e layer runs the live runtime LLM, which carries a known ~1-per-run transient. To absorb
+    it by mechanism (not judgement), a failed attempt is retried exactly once: if the retry passes
+    the question is ``FLAKY`` — it counts as a pass for the gate but the report keeps the **first**
+    attempt's evidence so variance stays visible. Two consecutive failures is a real ``FAIL`` and
+    blocks as before. Fact/retrieval are deterministic and never reach this path. Skipped when no
+    runtime LLM (``complete``) is supplied.
+    """
+    if complete is None:
+        return LayerResult("e2e", SKIP, "no runtime LLM (complete=) — e2e not evaluated")
+
+    first = _e2e_attempt(
+        conn, q, client=client, complete=complete, embed=embed,
+        settings=settings, gas_aliases=gas_aliases,
+    )
+    if first.status == PASS:
+        return first
+
+    # First attempt failed — retry once. Each attempt already runs in its own rolled-back
+    # savepoint, so the retry is independent.
+    retry = _e2e_attempt(
+        conn, q, client=client, complete=complete, embed=embed,
+        settings=settings, gas_aliases=gas_aliases,
+    )
+    if retry.status == PASS:
+        # Flaky: keep the FIRST attempt's evidence (what actually failed), labelled.
+        return LayerResult("e2e", FLAKY, "flaky (passed on retry) || first attempt: " + first.detail)
+    # Two consecutive failures — a real failure. Report the retry's evidence.
+    return retry
 
 
 def run_eval(
@@ -366,8 +413,20 @@ def format_report(report: EvalReport) -> str:
         )
     lines.append("")
     for layer, buckets in report.counts().items():
-        summary = " ".join(f"{k}={v}" for k, v in sorted(buckets.items()))
-        lines.append(f"{layer:10} {summary}")
+        # passed = pass + flaky (a flaky question passed on retry); applicable excludes the
+        # na/skip questions that were never evaluated. Flaky count is surfaced explicitly so
+        # live-LLM variance stays visible (e.g. "e2e   53/53, 1 flaky").
+        passed = buckets.get(PASS, 0) + buckets.get(FLAKY, 0)
+        applicable = sum(v for k, v in buckets.items() if k not in (NA, SKIP))
+        parts = [f"{passed}/{applicable}"]
+        if buckets.get(FLAKY):
+            parts.append(f"{buckets[FLAKY]} flaky")
+        noted = " ".join(
+            f"{k}={v}" for k, v in sorted(buckets.items()) if k in (FAIL, NA, SKIP) and v
+        )
+        if noted:
+            parts.append(noted)
+        lines.append(f"{layer:10} {', '.join(parts)}")
     if failures:
         lines.append("")
         lines.append("FAILURES (full evidence — ops kept nothing):")

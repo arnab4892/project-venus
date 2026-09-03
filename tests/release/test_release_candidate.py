@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from sqlalchemy import text
+
 from agentkit.release.candidate import create_rc, get_rc, list_rc, set_status
 
 
@@ -30,6 +32,27 @@ def test_status_transitions(seeded_conn) -> None:
     rc = create_rc(seeded_conn, "jyotech")
     set_status(seeded_conn, rc, "exported")
     assert get_rc(seeded_conn, rc)["status"] == "exported"
+
+
+def _timestamps(conn, rc_id: str) -> tuple:
+    row = conn.execute(
+        text("SELECT created_at, updated_at FROM staging.release_candidate WHERE id = :id"),
+        {"id": rc_id},
+    ).first()
+    return row[0], row[1]
+
+
+def test_status_update_advances_updated_at_but_not_created_at(seeded_conn) -> None:
+    # 0005: a rewrite stamps updated_at with clock_timestamp() (real modification
+    # instant, advancing even inside one transaction) while created_at is immutable.
+    rc = create_rc(seeded_conn, "jyotech")
+    created0, updated0 = _timestamps(seeded_conn, rc)
+    assert created0 == updated0  # equal at birth (both server-defaulted to now())
+
+    set_status(seeded_conn, rc, "exported")
+    created1, updated1 = _timestamps(seeded_conn, rc)
+    assert created1 == created0, "created_at must not change on update"
+    assert updated1 > updated0, "updated_at must advance on update"
 
 
 def test_bad_status_rejected(seeded_conn) -> None:

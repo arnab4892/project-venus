@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     llm_reasoning_effort: str | None = None
     llm_max_completion_tokens: int | None = None
 
+    # Qwen3/vLLM "thinking off" for the COMPOSE call only (the final answer composition, which
+    # spends the bulk of a turn's latency on hidden reasoning). Default off — a measurement knob,
+    # not an activated behaviour. When on, the compose request carries
+    # extra_body.chat_template_kwargs.enable_thinking=False; triage/parse calls are untouched.
+    llm_disable_thinking: bool = False
+
     # Embedding endpoint — OpenAI-compatible, self-hosted
     embed_base_url: str = "http://embed.internal:8001/v1"
     embed_model: str = "bge-m3"
