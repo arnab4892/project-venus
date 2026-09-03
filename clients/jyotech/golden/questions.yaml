@@ -1,8 +1,9 @@
-# Golden question suite (LLD-EVAL-01). 53 questions (the initial 40 + a 6-question Gate-2
+# Golden question suite (LLD-EVAL-01). 55 questions (the initial 40 + a 6-question Gate-2
 # extension + prod-mch16-specs + adversarial-round faq-eiga / faq-founder / cap-false-memory +
 # cap-wellhead-natgas + the faq-api618 machine-standards routing regression + the polish-pass
-# docs-both-catalogues multi-card golden): 20 capability,
-# 13 product, 12 company/docs, 6 after-sales, 2 out-of-scope. Each carries the LLD-EVAL-01 fields
+# docs-both-catalogues multi-card golden + the PRD-F-012 Hindi pair e2e-hindi-hydrogen /
+# e2e-hindi-price): 20 capability,
+# 14 product, 13 company/docs, 6 after-sales, 2 out-of-scope. Each carries the LLD-EVAL-01 fields
 # (question, expected_answer_contains, expected_source_ids, expected_outcome) plus optional
 # `fact` / `retrieval` execution blocks the runner uses to score the fact and retrieval
 # layers against the LIVE active release. The e2e (agent-answer) layer is reported "pending"
@@ -16,7 +17,7 @@
 
 questions:
 
-  # ---- capability (15) ---------------------------------------------------
+  # ---- capability (20) ---------------------------------------------------
   - id: cap-hydrogen-process
     question: "We need to compress hydrogen, about 3000 Nm3/hr from 20 to 350 bar. Oil-free is mandatory."
     # The live family's customer-facing name is "Process Compressors (Recip.)" — assert robust
@@ -261,7 +262,21 @@ questions:
     expected_source_ids: ["fam.process_recip"]
     expected_outcome: answer
 
-  # ---- product (10) ------------------------------------------------------
+  - id: e2e-hindi-hydrogen
+    # e2e-only (PRD-F-012 Hindi / LLD-RT-07): NO fact/retrieval blocks — scored only at the e2e
+    # layer. Mirrors e2e-hinglish-hydrogen; the reply is LLM-composed, so it asserts robust family
+    # substrings, NOT a figure (the English cap-hydrogen-process owns the 25000 guard; Devanagari
+    # digit-folding has its own unit tests). The Devanagari anchor "है" (the highest-frequency Hindi
+    # copula, near-certain in any conversational Hindi reply) fails an English/Hinglish reply — the
+    # single-turn way to assert the reply actually came out in Devanagari. Family/model names and
+    # units stay English (Latin script) even in a Hindi reply.
+    question: "हाइड्रोजन compressor चाहिए, 3000 Nm3/hr, 350 bar तक, oil-free"
+    expected_answer_contains: ["process", "recip", "है"]
+    must_not_contain: ["20000", "near-edge"]
+    expected_source_ids: ["fam.process_recip"]
+    expected_outcome: answer
+
+  # ---- product (14) ------------------------------------------------------
   - id: prod-ccdu
     question: "Tell me about the CCDU compressor."
     expected_answer_contains: ["CCDU"]
@@ -404,6 +419,18 @@ questions:
       args: {model_or_family: "MCH-16"}
       expect_ids: ["fam.mch_engine_bac"]
 
+  - id: e2e-hindi-price
+    # e2e-only (PRD-F-012 Hindi / LLD-RT-07): a Devanagari price ask must hand off in Hindi with no
+    # figure. The reply is a fixed per-language handoff template (commercial_routing / product_advisor
+    # both carry a vetted "hi" template), so the anchor is a substring PRESENT IN BOTH templates —
+    # "जोड़" (connect) — which proves a Devanagari reply regardless of which handoff path triage picks.
+    # must_not mirrors prod-price-handoff: no currency/price token may ever appear.
+    question: "MCH-16 की कीमत क्या है?"
+    expected_answer_contains: ["जोड़"]
+    must_not_contain: ["₹", "rs.", "rupee", "lakh", "usd", "$"]
+    expected_source_ids: []
+    expected_outcome: handoff
+
   - id: prod-nameless-cabinet
     # Exercises the null-model_name display rule (LLD-EXT-06): the fill-containment products
     # carry no printed model number and must be presented by family name + variant.
@@ -416,7 +443,7 @@ questions:
       args: {model_or_family: "Fill Containment Cabinets"}
       expect_ids: ["fam.fill_containment_cabinet"]
 
-  # ---- company / docs (8) ------------------------------------------------
+  # ---- company / docs (13) ------------------------------------------------
   - id: co-certifications
     question: "Which ISO certifications does Jyotech hold?"
     expected_answer_contains: ["ISO 9001"]
@@ -566,7 +593,7 @@ questions:
       query: "AMCA certified smoke exhausters and PPV blowers"
       expect_locator: "FIRE RESCUE & DIVING EQUIPMENT Catalogue"
 
-  # ---- after-sales (5) ---------------------------------------------------
+  # ---- after-sales (6) ---------------------------------------------------
   - id: office-south
     # "Which of your offices…" keeps it a clear office question (a bare "who covers the South"
     # can read as a commercial/coverage enquiry).
