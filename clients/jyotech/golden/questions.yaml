@@ -27,7 +27,13 @@ questions:
     # The 3000 Nm3/hr duty sits well inside the Process family's published 25000 Nm3/hr / 1000 barg
     # envelope, so the answer must state 25000 and NOT frame it as near a limit, nor resurface the
     # website's rejected 20000 figure (milestone-5a §6 hydrogen fix, guarded at the answer layer).
-    must_not_contain: ["20000", "near a published limit", "near-edge"]
+    # Language-direction guard (LLD-RT-07): an English turn must answer in English. A live regression
+    # saw an English turn recite the Hinglish exemplar, yet pass because it asserted English tech
+    # terms. These romanised-Hindi function words cannot occur in an English reply or any product
+    # name; the Devanagari direction is already guarded by `script_purity`, so every reply language
+    # now has a golden asserting the other two do not appear uninvited.
+    must_not_contain: ["20000", "near a published limit", "near-edge",
+                       "aapki", "aapke", "aapko", "hamari", "chahiye", "kya main"]
     expected_source_ids: ["cap.doc_jyotech_catalog_process_s005.0", "fam.process_recip"]
     expected_outcome: answer
     fact:
@@ -275,6 +281,9 @@ questions:
     must_not_contain: ["20000", "near-edge"]
     expected_source_ids: ["fam.process_recip"]
     expected_outcome: answer
+    # Strict register (LLD-RT-07): after **bold** product/family names, units and standard codes
+    # are stripped, no ordinary Latin-script word may remain — the reply must be pure written Hindi.
+    script_purity: hi
 
   # ---- product (14) ------------------------------------------------------
   - id: prod-ccdu
@@ -395,7 +404,11 @@ questions:
     expected_answer_contains: ["265", "petrol", "electric"]
     # Voice: provenance rides in the citations, never in the prose (Part C). Not a document ask,
     # so no document/catalogue/page/"Source:" line may appear in the answer text.
-    must_not_contain: ["Source:", "catalog", "catalogue", "page)"]
+    # Language-direction guard (LLD-RT-07): an English product turn must answer in English, not drift
+    # into the vivid Hinglish MCH-16 exemplar — romanised-Hindi function words that can never appear
+    # in an English reply or a product name.
+    must_not_contain: ["Source:", "catalog", "catalogue", "page)",
+                       "aapki", "aapke", "aapko", "hamari", "chahiye", "kya main"]
     expected_source_ids: ["doc.jyotech_catalog_f_s"]
     expected_outcome: answer
     fact:
@@ -430,6 +443,10 @@ questions:
     must_not_contain: ["₹", "rs.", "rupee", "lakh", "usd", "$"]
     expected_source_ids: []
     expected_outcome: handoff
+    # Strict register (LLD-RT-07): whichever fixed hi handoff template triage picks
+    # (commercial_routing / product_advisor) must be pure written Hindi — no Latin outside the three
+    # exceptions. Both templates are now register-pure; this asserts it end to end.
+    script_purity: hi
 
   - id: prod-nameless-cabinet
     # Exercises the null-model_name display rule (LLD-EXT-06): the fill-containment products
@@ -449,7 +466,10 @@ questions:
     expected_answer_contains: ["ISO 9001"]
     # Voice (Part C): a certifications answer names no document/catalogue/page in prose — the
     # source is rendered from the structured citations only.
-    must_not_contain: ["Source:", "catalog", "catalogue", "page)"]
+    # Language-direction guard (LLD-RT-07): an English company/FAQ turn must answer in English, not
+    # recite the Hinglish exemplar — romanised-Hindi function words impossible in an English reply.
+    must_not_contain: ["Source:", "catalog", "catalogue", "page)",
+                       "aapki", "aapke", "aapko", "hamari", "chahiye", "kya main"]
     expected_source_ids: ["cf.doc_about_s000.5"]
     expected_outcome: answer
     fact:
