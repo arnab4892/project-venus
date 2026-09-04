@@ -34,6 +34,10 @@ In Claude Code this is driven by two slash commands (see `.claude/commands/`):
 - `/prd-change <CR title>` — guides the PRD edit, assigns the next requirement/CR IDs, bumps the version, writes the CR file and CHANGELOG entry.
 - `/propagate-prd CR-nnnn` — reads the CR and the PRD diff, proposes the HLD and LLD edits with their new versions, updates TRACEABILITY, and lists the code and tests that must change. It stops for review before touching code.
 
+## Prompt versions and the live bot
+
+Agent prompts are versioned in the database (`ops.prompt_version`), and a prompt version takes effect on `prompt activate` (golden-gated) — **not on git merge**. So "unmerged" does not mean "not live": a feature-branch session that activates its prompt versions changes the live bot even under a `main` checkout. Rule: **a feature-branch session that activates prompt versions either re-activates the prior active set before it stops, or the branch merges promptly — activation from a branch carries a rollback obligation.**
+
 ## Definition of "aligned"
 
 HLD and LLD are aligned when `TRACEABILITY.md` shows every `Active` PRD requirement mapped to at least one HLD item, every HLD item to at least one LLD item, and no HLD/LLD item cites a withdrawn requirement. `/propagate-prd` checks this and refuses to finish while it is false.
