@@ -53,16 +53,47 @@ from agentkit.runtime.triage import needs_clarification, run_triage
 
 logger = logging.getLogger(__name__)
 
-CLARIFY_MESSAGE = (
-    "Could you tell me a bit more about what you need — a compressor for a specific gas/duty, "
-    "product details, company or document information, or service and spares?"
-)
+# Fixed, per-language clarify / degrade sentences (LLD-RT-07), selected by the turn's detected
+# language. Deterministic and pre-vetted — never LLM-translated (these ship precisely when the
+# classifier is unsure or a model call has just failed). Technical terms and units stay English.
+_CLARIFY_TEXTS = {
+    "en": (
+        "Could you tell me a bit more about what you need — a compressor for a specific gas/duty, "
+        "product details, company or document information, or service and spares?"
+    ),
+    "hi": (
+        "क्या आप थोड़ा और बता सकते हैं कि आपको क्या चाहिए — किसी ख़ास गैस/ड्यूटी के लिए कंप्रेसर, किसी "
+        "उत्पाद की जानकारी, कंपनी या दस्तावेज़ की जानकारी, या सर्विस और स्पेयर पार्ट्स?"
+    ),
+    "hinglish": (
+        "Kya aap thoda aur bata sakte hain ki aapko kya chahiye — kisi specific gas/duty ke liye "
+        "compressor, product details, company ya document information, ya service aur spares?"
+    ),
+}
 # Shown when the runtime LLM returns invalid JSON 3× (ExtractionSkipped): degrade gracefully
 # to a clarify, never crash the turn. A self-hosted model can occasionally return junk.
-LLM_HICCUP_MESSAGE = (
-    "Sorry — I didn't quite catch that. Could you rephrase, or tell me the gas, flow and "
-    "discharge pressure you need?"
-)
+_HICCUP_TEXTS = {
+    "en": (
+        "Sorry — I didn't quite catch that. Could you rephrase, or tell me the gas, flow and "
+        "discharge pressure you need?"
+    ),
+    "hi": (
+        "माफ़ कीजिए — मैं ठीक से समझ नहीं पाया। क्या आप दोबारा बता सकते हैं, या जो गैस, फ़्लो और "
+        "डिस्चार्ज प्रेशर चाहिए वो बता दें?"
+    ),
+    "hinglish": (
+        "Maaf kijiye — main theek se samajh nahi paya. Kya aap dobara bata sakte hain, ya jo gas, "
+        "flow aur discharge pressure chahiye woh bata dein?"
+    ),
+}
+# Back-compat aliases: the English strings are the historical single-string constants.
+CLARIFY_MESSAGE = _CLARIFY_TEXTS["en"]
+LLM_HICCUP_MESSAGE = _HICCUP_TEXTS["en"]
+
+
+def _lang_of(triage: dict | None) -> str:
+    lang = (triage or {}).get("language", "en")
+    return lang if lang in _CLARIFY_TEXTS else "en"
 
 # A safe triage default when the classifier LLM fails — low confidence routes to clarify.
 _TRIAGE_FALLBACK = {
@@ -203,7 +234,7 @@ def n_agent(state: _GState) -> dict:
     wf = state["wf"]
     _stage(wf, "Looking into it")
     if wf.route == "clarify":
-        wf.reply_messages = [MessageRecord("assistant", "text", CLARIFY_MESSAGE)]
+        wf.reply_messages = [MessageRecord("assistant", "text", _CLARIFY_TEXTS[_lang_of(wf.triage)])]
         wf.outcome = "clarify"
         return {}
 
@@ -227,7 +258,7 @@ def n_agent(state: _GState) -> dict:
     except ExtractionSkipped as exc:
         # An agent LLM call returned invalid JSON 3× → degrade to a clarify, never crash.
         wf.tool_records = tools.records
-        wf.reply_messages = [MessageRecord("assistant", "text", LLM_HICCUP_MESSAGE)]
+        wf.reply_messages = [MessageRecord("assistant", "text", _HICCUP_TEXTS[_lang_of(wf.triage)])]
         wf.outcome = "clarify"
         wf.invocations.append(
             InvocationRecord(
@@ -267,6 +298,7 @@ def n_ground(state: _GState) -> dict:
                 out.citations,
                 wf.tool_records,
                 _user_texts(wf.history, wf.latest_user),
+                language=(wf.triage or {}).get("language", "en"),
             )
             wf.reply_messages = [MessageRecord("assistant", "text", gr.text)]
             # Structured extras (e.g. a document_card) ride along only when grounding passed —

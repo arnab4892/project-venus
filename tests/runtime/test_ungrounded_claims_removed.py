@@ -16,6 +16,7 @@ from tests.runtime._helpers import FakeLLM
 from agentkit.runtime.grounding import (
     FALLBACK_TEXT,
     all_numbers,
+    fallback_text,
     ground_answer,
     redact_unsourced_spec_numbers,
     spec_numbers,
@@ -43,6 +44,50 @@ def test_markdown_bold_and_table_do_not_hide_spec_numbers():
     clean, stripped = redact_unsourced_spec_numbers("published up to **99,999 Nm3/hr**", set())
     assert stripped == [99999.0]
     assert "99,999" not in clean
+
+
+def test_devanagari_spec_numbers_are_folded():
+    """Devanagari digits (०-९) fold 1:1 to ASCII before the numeric guard, so a Devanagari figure
+    can never slip past spec_numbers / all_numbers or survive redaction unnoticed (LLD-RT-05/07).
+
+    The ASCII-digit persona rule is the intended behaviour; this is the safety net. Being 1:1
+    single code points, folding preserves offsets — redaction stays aligned and normalises to ASCII.
+    """
+    assert spec_numbers("२५,००० Nm3/hr") == {25000.0}
+    assert 25000.0 in all_numbers("२५,००० Nm3/hr")
+
+    # an unsourced Devanagari spec figure is stripped exactly like an ASCII one
+    clean, stripped = redact_unsourced_spec_numbers("published up to ९९,९९९ Nm3/hr", set())
+    assert stripped == [99999.0]
+    assert "९९,९९९" not in clean
+
+    # a *sourced* Devanagari figure survives — and comes back normalised to ASCII digits
+    clean, stripped = redact_unsourced_spec_numbers("up to २५,००० Nm3/hr", {25000.0})
+    assert stripped == []
+    assert "25,000 Nm3/hr" in clean
+
+
+def test_fallback_ships_in_visitor_language():
+    """A gate-stripped draft ships the fallback in the visitor's language (LLD-RT-07). The strings
+    are fixed and pre-vetted — never LLM-translated (the gate fired because the model just failed).
+    """
+    for lang in ("hi", "hinglish"):
+        gr = ground_answer("Our range covers this.", [], [_match_record()], ["duty"], language=lang)
+        assert gr.ok is False
+        assert gr.text == fallback_text(lang)
+        assert gr.text != FALLBACK_TEXT  # not the English default
+    # unknown / missing language falls back to English (back-compat)
+    gr = ground_answer("Our range covers this.", [], [_match_record()], ["duty"], language=None)
+    assert gr.text == FALLBACK_TEXT
+
+
+def test_hi_fallback_is_register_pure():
+    """The hi fallback is a customer-facing Devanagari reply: it must carry no ordinary Latin word
+    outside the three persona exceptions (LLD-RT-07), by the same checker the eval gate uses."""
+    from agentkit.eval.runner import script_purity_offenders
+    from agentkit.runtime.grounding import _FALLBACK_TEXTS
+
+    assert script_purity_offenders(_FALLBACK_TEXTS["hi"]) == []
 
 
 def _match_record() -> ToolCallRecord:
@@ -89,11 +134,11 @@ def test_fully_sourced_answer_passes():
     assert any(c.kind == "capability" and c.ref_id == "cap.002" for c in gr.citations)
 
 
-def _fabricating_fake() -> FakeLLM:
+def _fabricating_fake(language: str = "en") -> FakeLLM:
     return FakeLLM(
         {
             "triage": {
-                "division": "industrial", "intent": "application_enquiry", "language": "en",
+                "division": "industrial", "intent": "application_enquiry", "language": language,
                 "in_scope": True, "pii_present": False, "confidence": 0.95,
             },
             "application_slots": {
@@ -130,3 +175,14 @@ def test_full_turn_ships_fallback_not_fabrication(seeded_conn, make_ctx, new_ses
         text("SELECT count(*) FROM ops.citation WHERE turn_id = (SELECT turn_id FROM ops.turn WHERE session_id = :s)"),
         {"s": sid},
     ).scalar_one() == 0
+
+
+def test_full_turn_ships_hindi_fallback(seeded_conn, make_ctx, new_session):
+    """A gate strip on a Hindi turn ships the Hindi fallback, not the English one (LLD-RT-07)."""
+    ctx = make_ctx(_fabricating_fake("hi"))
+    sid = new_session()
+    result = run_turn(ctx, sid, "हाइड्रोजन, 3000 Nm3/hr, 350 bar, oil-free")
+
+    assert result.outcome == "fallback"
+    assert result.messages[-1]["text"] == fallback_text("hi")
+    assert result.messages[-1]["text"] != FALLBACK_TEXT

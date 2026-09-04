@@ -25,11 +25,45 @@ from dataclasses import dataclass, field
 
 from agentkit.runtime.ops import CitationRecord, ToolCallRecord
 
-FALLBACK_TEXT = (
-    "I want to make sure I only give you figures we actually publish, and I don't have that "
-    "one in front of me. Let me put you with our engineers who can confirm the exact details — "
-    "shall I?"
-)
+# Fixed, per-language fallback sentences shipped when a draft fails the grounding gate
+# (LLD-RT-05, LLD-RT-07). Deterministic and pre-vetted — never LLM-translated at runtime,
+# because the fallback fires exactly when the model's own output has just failed the gate.
+# Technical/model terms and units stay English even in the hi/hinglish register (persona rule).
+_FALLBACK_TEXTS = {
+    "en": (
+        "I want to make sure I only give you figures we actually publish, and I don't have that "
+        "one in front of me. Let me put you with our engineers who can confirm the exact details — "
+        "shall I?"
+    ),
+    "hi": (
+        "मैं आपको सिर्फ़ वही आँकड़े देना चाहता हूँ जो हम वाकई प्रकाशित करते हैं, और वो अभी मेरे सामने नहीं है। "
+        "मैं आपको हमारे इंजीनियरों से जोड़ देता हूँ जो सटीक जानकारी की पुष्टि कर सकते हैं — क्या मैं ऐसा करूँ?"
+    ),
+    "hinglish": (
+        "Main aapko sirf wahi figures dena chahta hoon jo hum actually publish karte hain, aur woh "
+        "abhi mere saamne nahi hai. Main aapko hamare engineers se jod deta hoon jo exact details "
+        "confirm kar sakte hain — kya main aisa karun?"
+    ),
+}
+# Back-compat alias: the English fallback is the historical single-string constant.
+FALLBACK_TEXT = _FALLBACK_TEXTS["en"]
+
+
+def fallback_text(language: str | None) -> str:
+    """The gate-strip fallback sentence in the visitor's language (defaults to English)."""
+    return _FALLBACK_TEXTS.get((language or "en").lower(), _FALLBACK_TEXTS["en"])
+
+
+# Devanagari digits (०-९, U+0966–U+096F) fold 1:1 to ASCII. Applied before every numeric match
+# so a Devanagari figure can never slip past the numeric guard (the ASCII-digit persona rule is
+# the intended behaviour; this is the safety net). Being 1:1 single code points, str.translate
+# preserves every offset, so redaction substitution stays aligned and the output normalises to ASCII.
+_DEVANAGARI_DIGITS = str.maketrans("०१२३४५६७८९", "0123456789")
+
+
+def _fold_digits(text: str) -> str:
+    return (text or "").translate(_DEVANAGARI_DIGITS)
+
 
 # Units that mark a number as a *spec* (capacity / pressure / measure). Longer tokens first.
 _UNIT = (
@@ -47,11 +81,11 @@ def _to_float(token: str) -> float:
 
 
 def _all_numbers(text: str) -> set[float]:
-    return {_to_float(m.group(0)) for m in _NUMBER_RE.finditer(text or "")}
+    return {_to_float(m.group(0)) for m in _NUMBER_RE.finditer(_fold_digits(text))}
 
 
 def _spec_numbers(text: str) -> set[float]:
-    cleaned = _CITATION_MARKER_RE.sub(" ", text or "")
+    cleaned = _CITATION_MARKER_RE.sub(" ", _fold_digits(text))
     return {_to_float(m.group(1)) for m in _SPEC_RE.finditer(cleaned)}
 
 
@@ -88,7 +122,7 @@ def redact_unsourced_spec_numbers(text: str, allowed: set[float]) -> tuple[str, 
         stripped.append(num)
         return "…"
 
-    cleaned = _SPEC_RE.sub(_repl, _CITATION_MARKER_RE.sub(" ", text or ""))
+    cleaned = _SPEC_RE.sub(_repl, _CITATION_MARKER_RE.sub(" ", _fold_digits(text)))
     return cleaned, stripped
 
 
@@ -245,11 +279,13 @@ def ground_answer(
     cited_tr_ids: list[str],
     tool_records: list[ToolCallRecord],
     user_texts: list[str],
+    language: str | None = "en",
 ) -> GroundingResult:
     """Apply the citation + numeric gate to a drafted answer.
 
     Returns a :class:`GroundingResult`: on pass, the original text + derived citation rows and
-    ``status="full"``; on fail, the fallback text, no citations and ``status="none"``.
+    ``status="full"``; on fail, the fallback text (in the visitor's ``language``, LLD-RT-07),
+    no citations and ``status="none"``.
     """
     by_id = {rec.tr_id: rec for rec in tool_records}
     cited = [tid for tid in cited_tr_ids if tid in by_id]
@@ -282,7 +318,7 @@ def ground_answer(
 
     return GroundingResult(
         ok=False,
-        text=FALLBACK_TEXT,
+        text=fallback_text(language),
         citations=[],
         grounding={
             "claims": claims,

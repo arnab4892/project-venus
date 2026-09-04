@@ -109,16 +109,20 @@ class EvalReport:
 
 _DIGIT_COMMA_RE = re.compile(r"(?<=\d),(?=\d)")
 _TRAILING_ZERO_RE = re.compile(r"(\d)\.0+(?!\d)")
+# Devanagari digits fold 1:1 to ASCII (safety net mirroring runtime/grounding.py) so a Devanagari
+# figure in an answer still matches an ASCII needle and can't slip past a must_not guard unnoticed.
+_DEVANAGARI_DIGITS = str.maketrans("०१२३४५६७८९", "0123456789")
 
 
 def normalize_digits(text: str) -> str:
     """Fold number typography so digit-group commas and spurious ``.0`` don't defeat matching.
 
-    ``25,000`` → ``25000``; ``25000.0`` → ``25000``. Applied to BOTH the answer and the needle so
-    an `expected_answer_contains` "25000" matches a formatted "25,000", and a `must_not_contain`
-    "20000" still catches "20,000".
+    ``25,000`` → ``25000``; ``25000.0`` → ``25000``; Devanagari ``२५,०००`` → ``25000``. Applied to
+    BOTH the answer and the needle so an `expected_answer_contains` "25000" matches a formatted
+    "25,000", and a `must_not_contain` "20000" still catches "20,000".
     """
-    t = _DIGIT_COMMA_RE.sub("", text or "")
+    t = (text or "").translate(_DEVANAGARI_DIGITS)
+    t = _DIGIT_COMMA_RE.sub("", t)
     return _TRAILING_ZERO_RE.sub(r"\1", t)
 
 
@@ -126,6 +130,58 @@ def text_contains(haystack: str, needle: str) -> bool:
     """Case-insensitive containment, digit-normalised on both sides."""
     h, n = haystack.lower(), needle.lower()
     return n in h or normalize_digits(n) in normalize_digits(h)
+
+
+# --- script purity (LLD-EVAL-02, LLD-RT-07) -------------------------------------------------
+# A Devanagari reply may carry Latin script ONLY for the three persona exceptions:
+#   (1) exact product / family / model / brand names, in **bold**;
+#   (2) units (Nm³/hr, bar, barg, kW, HP, lpm, SCMD, SCMH, kg/hr, …);
+#   (3) standard / certification codes (API-618, ISO 9001:2015, EN, NFPA, …).
+# After those are stripped — along with `{format placeholders}`, figures and punctuation — ANY
+# remaining Latin-script word ([A-Za-z]{2,}) is an ordinary English leak: the reply is not pure
+# written Hindi. Threshold is zero (strict by design); the e2e retry-once policy absorbs a one-off
+# wobble, a systematic leak blocks the gate with the offending words named. The same function backs
+# the fixed per-language template unit tests, so one implementation defines "register-pure" for
+# both the live gate and the deterministic strings.
+_BOLD_SPAN_RE = re.compile(r"\*\*.+?\*\*", re.DOTALL)
+_FORMAT_PLACEHOLDER_RE = re.compile(r"\{[^{}]*\}")
+# Inline citation markers (`[tr1]`, `[1]`, `[tr1, tr2]`) are refs, not prose — the compose
+# exemplars keep citations in the structured array, but strip any that leak inline so "tr" is
+# never miscounted as an English word.
+_CITE_MARKER_RE = re.compile(r"\[\s*(?:tr)?\d+(?:\s*,\s*(?:tr)?\d+)*\s*\]", re.IGNORECASE)
+# Standard/certification codes are an all-caps run (≥2 letters), optionally with an attached
+# version (API-618, ISO 9001:2015, EN, NFPA, ASME, ISO 13631). All-caps is the exception by design;
+# ordinary English leaks are mixed-case (published, engineers, capacity …) and are NOT all-caps.
+_STD_CODE_RE = re.compile(r"[A-Z]{2,}(?:[-\s]?\d[\w:./-]*)?")
+# Units that stay Latin even in a Hindi reply (persona rule). "Nm" / "kW" are not all-caps runs, so
+# they are caught here, not by the code regex. Case-insensitive; longest tokens first.
+_PURITY_UNIT_RE = re.compile(
+    r"(?:nm³?\s*/?\s*hr|nm3\s*/?\s*hr|m³\s*/\s*hr|m3\s*/\s*hr|kg\s*/\s*hr|kg\s*/\s*cm²?g|"
+    r"scmd|scmh|barg|bar|psi|kw|hp|lpm|cfm|tpd|lumen|tons?)",
+    re.IGNORECASE,
+)
+_LATIN_WORD_RE = re.compile(r"[A-Za-z]{2,}")
+
+
+def script_purity_offenders(text: str) -> list[str]:
+    """Ordinary Latin-script words left in a reply after the three persona exceptions are removed.
+
+    Returns the offending English words (deduped, first-seen order); an empty list means the reply
+    is register-pure written Hindi. Strips, in order: inline ``[tr1]`` citation markers, ``**bold**``
+    spans (product/family/model/brand names), ``{format placeholders}`` (a template's runtime-filled
+    technical values), standard / certification codes, unit tokens — then reports any remaining
+    ``[A-Za-z]{2,}`` run. Figures,
+    punctuation and Devanagari never match a Latin-word run, so they are inert and never trigger.
+    """
+    stripped = _CITE_MARKER_RE.sub(" ", text or "")
+    stripped = _BOLD_SPAN_RE.sub(" ", stripped)
+    stripped = _FORMAT_PLACEHOLDER_RE.sub(" ", stripped)
+    stripped = _STD_CODE_RE.sub(" ", stripped)
+    stripped = _PURITY_UNIT_RE.sub(" ", stripped)
+    offenders: dict[str, None] = {}
+    for m in _LATIN_WORD_RE.finditer(stripped):
+        offenders.setdefault(m.group(0), None)
+    return list(offenders)
 
 
 def _collect_ids(obj) -> set[str]:
@@ -288,6 +344,16 @@ def _e2e_attempt(
     present = [s for s in (q.get("must_not_contain") or []) if text_contains(answer, s)]
     if present:
         reasons.append(f"forbidden text present {present}")
+
+    # Opt-in per-question strict register check (LLD-RT-07): a Devanagari reply must carry no
+    # ordinary Latin-script word outside the product-name / unit / standard-code exceptions.
+    if q.get("script_purity") == "hi":
+        offenders = script_purity_offenders(answer)
+        if offenders:
+            reasons.append(
+                "script purity (hi): Latin words outside product-name/unit/code exceptions "
+                f"{offenders}"
+            )
 
     need_ids = set(q.get("expected_source_ids") or [])
     missing_ids = need_ids - cite_ids

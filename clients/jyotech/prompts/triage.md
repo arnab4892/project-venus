@@ -32,7 +32,9 @@ Return JSON with exactly these fields:
   - `out_of_scope` — anything unrelated to Jyotech, its products or its business (weather,
     jokes, poems, general knowledge).
 - `language` — the visitor's language: `en`, `hi` (Hindi), or `hinglish` (romanised
-  Hindi/English mix). Judge from the message text.
+  Hindi/English mix). Judge from the message text. **Devanagari-script Hindi (है, चाहिए, …) → `hi`;
+  romanised Hindi / mixed Hindi-English in Latin script → `hinglish`.** English model names, units
+  or a stray English word inside a Devanagari message do not make it `hinglish` — it stays `hi`.
 - `in_scope` — `true` if Jyotech can meaningfully help, `false` for `out_of_scope`.
 - `pii_present` — `true` if the message contains personal contact details (name+phone/email).
 - `confidence` — your confidence in this classification, 0.0–1.0.

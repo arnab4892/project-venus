@@ -8,7 +8,12 @@ from __future__ import annotations
 
 from tests.runtime._helpers import FakeLLM
 
-from agentkit.eval.runner import normalize_digits, run_eval, text_contains
+from agentkit.eval.runner import (
+    normalize_digits,
+    run_eval,
+    script_purity_offenders,
+    text_contains,
+)
 
 
 # --- matcher: number typography must not defeat contains / must_not_contain -------
@@ -31,6 +36,11 @@ def test_normalize_digits():
     assert normalize_digits("25,000") == "25000"
     assert normalize_digits("25000.0") == "25000"
     assert normalize_digits("1,00,000.00") == "100000"
+    # Devanagari numerals fold to ASCII (safety net) so a Devanagari figure still matches an
+    # ASCII needle and can't slip past a must_not guard unnoticed (LLD-RT-07).
+    assert normalize_digits("२५,०००") == "25000"
+    assert text_contains("published up to २५,००० Nm3/hr", "25000")
+    assert text_contains("Capacity: २०,००० Nm3/hr", "20000")
 
 
 def test_markdown_bold_and_table_pipes_do_not_break_matching():
@@ -42,6 +52,43 @@ def test_markdown_bold_and_table_pipes_do_not_break_matching():
     # a must_not_contain guard still catches a forbidden needle inside bold / a table cell
     assert text_contains("**Source:** Jyotech Catalog", "source:")
     assert text_contains("| catalogue | link |", "catalogue")
+
+
+# --- script purity (LLD-RT-07): strict Devanagari register check --------------------------------
+
+def test_script_purity_pure_hindi_reply_passes():
+    # Pure written Hindi with a bold Latin product/family name, a unit and a standard code — the
+    # three allowed exceptions. Nothing to report.
+    reply = (
+        "यह ज़रूरत हमारी **Process Compressors (Recip.)** श्रेणी में आराम से आती है — "
+        "25,000 Nm³/hr और 1,000 barg तक, API-618 के अनुसार। क्या मैं आपको हमारे इंजीनियरों से जोड़ूँ?"
+    )
+    assert script_purity_offenders(reply) == []
+
+
+def test_script_purity_one_stray_english_word_fails_and_is_named():
+    reply = "यह ज़रूरत हमारी **Process Compressors** श्रेणी में published है।"
+    assert script_purity_offenders(reply) == ["published"]
+
+
+def test_script_purity_lists_every_offender_in_order():
+    reply = "यह available और suitable विकल्प आपकी requirement के लिए है।"
+    assert script_purity_offenders(reply) == ["available", "suitable", "requirement"]
+
+
+def test_script_purity_bold_names_units_codes_digits_markers_never_trigger():
+    # Bold product/family/brand names, the full unit set, standard codes, ASCII + Devanagari
+    # figures and inline citation markers are all inert — none is an "English word" leak.
+    assert script_purity_offenders("**MP/HP Air & Gas Compressors** और **Jyotech** — ठीक है।") == []
+    assert script_purity_offenders("९–१० HP, 265 lpm, 20000 SCMD, 5 kW, 850 barg, 40 kg/hr — सब ठीक।") == []
+    assert script_purity_offenders("**Jyotech** के पास ISO 9001:2015, EN और NFPA हैं।") == []
+    assert script_purity_offenders("यह ठीक है [tr1]। और यह भी [tr2, tr3]।") == []
+
+
+def test_script_purity_folds_no_devanagari_or_punctuation_into_offenders():
+    # A reply with only Devanagari words, digits and punctuation has no Latin runs at all.
+    assert script_purity_offenders("२५,००० तक की क्षमता — बढ़िया! क्या मैं जोड़ूँ?") == []
+
 
 _HYDROGEN_ARGS = {
     "gas": "hydrogen",
@@ -169,6 +216,30 @@ def test_e2e_missing_expected_text_fails(seeded_conn):
     )
     assert report.ok is False
     assert report.results[0].status("e2e") == "fail"
+
+
+def test_e2e_script_purity_flags_latin_leak_in_hindi_reply(seeded_conn):
+    # `script_purity: hi` opts a question into the strict register check: a Hindi reply that copies
+    # English words from the tool vocabulary fails and the offenders are named (LLD-RT-07). The
+    # reply is properly cited so the grounding gate keeps it (else the pure fallback would ship).
+    leak = "यह ड्यूटी हमारी process gas श्रेणी में published range के भीतर आराम से आती है [tr1]।"
+    fake = _capability_fake(leak)
+    q = {**_E2E_Q, "expected_answer_contains": [], "expected_source_ids": [], "script_purity": "hi"}
+    report = run_eval(seeded_conn, "jyotech", questions=[q], complete=fake, layers=("e2e",))
+    assert report.ok is False
+    assert report.results[0].status("e2e") == "fail"
+    detail = next(r.detail for r in report.results[0].layers if r.layer == "e2e")
+    assert "script purity" in detail
+    assert "published" in detail and "process" in detail
+
+
+def test_e2e_script_purity_passes_a_pure_hindi_reply(seeded_conn):
+    pure = "यह ड्यूटी हमारी प्रोसेस गैस श्रेणी में आराम से आती है [tr1]।"
+    fake = _capability_fake(pure)
+    q = {**_E2E_Q, "expected_answer_contains": [], "expected_source_ids": [], "script_purity": "hi"}
+    report = run_eval(seeded_conn, "jyotech", questions=[q], complete=fake, layers=("e2e",))
+    assert report.ok is True
+    assert report.results[0].status("e2e") == "pass"
 
 
 def test_e2e_retry_pass_is_flaky(seeded_conn):

@@ -10,7 +10,13 @@ from __future__ import annotations
 from tests.runtime._helpers import activate_all_prompts
 
 from agentkit.client_config import gas_alias_map
-from agentkit.runtime.orchestrator import LLM_HICCUP_MESSAGE, Ctx, run_turn
+from agentkit.runtime.orchestrator import (
+    _CLARIFY_TEXTS,
+    _HICCUP_TEXTS,
+    LLM_HICCUP_MESSAGE,
+    Ctx,
+    run_turn,
+)
 from sqlalchemy import text
 
 
@@ -65,3 +71,44 @@ def test_agent_llm_invalid_degrades_to_clarify(seeded_conn, new_session):
     assert result.route == "application_discovery"
     assert result.outcome == "clarify"
     assert result.messages[-1]["text"] == LLM_HICCUP_MESSAGE
+
+
+def _triage_lowconf_hi(messages, schema, name):
+    """Valid triage JSON, low confidence + Hindi — routes to clarify in Hindi."""
+    import json
+
+    if name == "triage":
+        return json.dumps({"division": "unknown", "intent": "out_of_scope", "language": "hi",
+                           "in_scope": True, "pii_present": False, "confidence": 0.3})
+    return "not json"
+
+
+def test_low_confidence_clarify_ships_in_visitor_language(seeded_conn, new_session):
+    """A low-confidence clarify ships the clarify prompt in the visitor's language (LLD-RT-07)."""
+    ctx = _ctx(seeded_conn, _triage_lowconf_hi)
+    sid = new_session()
+    result = run_turn(ctx, sid, "मुझे कुछ चाहिए")
+    assert result.outcome == "clarify"
+    assert result.messages[-1]["text"] == _CLARIFY_TEXTS["hi"]
+    assert result.messages[-1]["text"] != _CLARIFY_TEXTS["en"]
+
+
+def test_agent_hiccup_degrades_in_visitor_language(seeded_conn, new_session):
+    """An agent LLM hiccup on a Hindi turn degrades to the Hindi hiccup message, not English."""
+    triage = {"division": "industrial", "intent": "application_enquiry", "language": "hi",
+              "in_scope": True, "pii_present": False, "confidence": 0.95}
+    ctx = _ctx(seeded_conn, _triage_ok_then_bad({"triage": triage}))
+    sid = new_session()
+    result = run_turn(ctx, sid, "हाइड्रोजन, 3000 Nm3/hr, 350 bar")
+    assert result.outcome == "clarify"
+    assert result.messages[-1]["text"] == _HICCUP_TEXTS["hi"]
+
+
+def test_hi_clarify_and_hiccup_are_register_pure():
+    """The clarify and hiccup degrade strings ship as Devanagari replies precisely when a model
+    call has just failed — so their hi variants must be register-pure (LLD-RT-07), verified with the
+    same checker the eval gate uses."""
+    from agentkit.eval.runner import script_purity_offenders
+
+    assert script_purity_offenders(_CLARIFY_TEXTS["hi"]) == []
+    assert script_purity_offenders(_HICCUP_TEXTS["hi"]) == []

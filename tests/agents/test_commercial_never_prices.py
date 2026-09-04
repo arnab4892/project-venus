@@ -70,3 +70,15 @@ def test_dealer_ask_routes_as_dealer(seeded_conn, make_ctx, new_session):
     import json
     out = out if isinstance(out, dict) else json.loads(out)
     assert out["lead_type"] == "dealer"
+
+
+def test_hi_commercial_handoff_is_register_pure():
+    """The hi commercial/dealer handoff is a fixed Devanagari reply — it must be register-pure
+    (LLD-RT-07), for both team fills, verified with the same checker the eval gate uses on the
+    e2e-hindi-price golden (this is the other handoff path triage may pick)."""
+    from agentkit.eval.runner import script_purity_offenders
+    from agentkit.runtime.agents.commercial_routing import _TEAM, _TEMPLATES
+
+    for team in ("commercial", "dealer"):
+        filled = _TEMPLATES["hi"].format(team=_TEAM[team]["hi"])
+        assert script_purity_offenders(filled) == []
