@@ -110,6 +110,9 @@ AFTER_SALES_SLOTS = ["model", "serial_or_year", "site_city", "need", "contact_pr
 # Product-advisor intent parse (LLD-AG-02). `model_or_family` is the model/kit/family the
 # visitor named (null if they asked generally); `is_price_or_leadtime` flags a commercial ask
 # that must route to handoff, never an answer; `search_query` is an English retrieval phrase.
+# `compare_items` is the explicit-comparison multi-fetch list: the 2+ named products/families the
+# visitor asked to compare (empty otherwise); when populated each item is fetched independently so
+# a comparison table grounds by design, not by retrieval co-occurrence luck.
 PRODUCT_QUERY_SCHEMA: dict = {
     "type": "object",
     "additionalProperties": False,
@@ -117,8 +120,9 @@ PRODUCT_QUERY_SCHEMA: dict = {
         "model_or_family": _STR_OR_NULL,
         "is_price_or_leadtime": {"type": "boolean"},
         "search_query": {"type": "string"},
+        "compare_items": {"type": "array", "items": {"type": "string"}},
     },
-    "required": ["model_or_family", "is_price_or_leadtime", "search_query"],
+    "required": ["model_or_family", "is_price_or_leadtime", "search_query", "compare_items"],
 }
 
 # Query translation (LLD-RT-07): retrieval stays English, so a Hindi/Hinglish free-text query

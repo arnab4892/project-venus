@@ -179,6 +179,14 @@ def compose_grounded_answer(
             "in earlier messages of this conversation."
         )
         messages = build_chat_messages(system, history, latest_user)
+        # Signal the reply language to the runtime thinking-gate for THIS compose call: the
+        # LLM_DISABLE_THINKING knob silences en/hinglish compose but leaves hi thinking on, since the
+        # Devanagari register needs compose reasoning (compose_thinking_off, LLD-RT-07). Attribute
+        # idiom (like last_tokens); the runtime seam reads it, other complete seams ignore it.
+        try:
+            complete.compose_language = language
+        except (AttributeError, TypeError):  # a seam that can't carry attributes ⇒ no-op
+            pass
         raw = call_json(
             client=None,
             complete=complete,
