@@ -13,17 +13,45 @@ from __future__ import annotations
 from agentkit.extract.llm import CompleteFn, call_json
 from agentkit.runtime.schemas import TRANSLATE_SCHEMA
 
-_LANGUAGE_NAMES = {"en": "English", "hi": "Hindi", "hinglish": "Hinglish (romanised Hindi/English)"}
+# The response-language line is the LAST thing the compose model reads, so it must be a firm,
+# self-sufficient instruction in EVERY language — not a bare label. The agent prompts carry worked
+# examples in English, Hinglish and Devanagari; without a firm last-position instruction the model
+# imitates whichever example reads most vividly and drifts into that example's language (a live
+# regression: an English turn recited the Hinglish exemplar). So each language closes with the same
+# clause — examples show structure only; the reply language comes ONLY from this instruction — at
+# equal strength. Hindi additionally restates its written-Devanagari register, where recency matters
+# most (LLD-RT-07).
+_LANGUAGE_ONLY_TAIL = (
+    "Whatever language the prompt's example answers use, they illustrate structure and format only; "
+    "the reply language comes ONLY from this instruction."
+)
+_ENGLISH_RESPONSE = (
+    "Reply in English only. Do not use Hindi or Hinglish words or phrasing. " + _LANGUAGE_ONLY_TAIL
+)
+_HINGLISH_RESPONSE = (
+    "Reply in Hinglish — romanised Hindi/English in Latin script, the way an Indian sales engineer "
+    "speaks. No Devanagari script, and do not drift into pure English. " + _LANGUAGE_ONLY_TAIL
+)
+_HINDI_RESPONSE = (
+    "Respond in written Devanagari Hindi throughout — the way a Hindi newspaper prints it.\n"
+    "Latin script ONLY for exact product/family/model/brand names (in bold), units and standard "
+    "codes; every other word is Hindi, and all figures are ASCII digits. " + _LANGUAGE_ONLY_TAIL
+)
+_RESPONSES = {"en": _ENGLISH_RESPONSE, "hi": _HINDI_RESPONSE, "hinglish": _HINGLISH_RESPONSE}
 
 
 def respond_in(language: str | None) -> str:
-    """A one-line instruction telling an agent which language to reply in.
+    """An instruction telling an agent which language to reply in (LLD-RT-07).
 
-    A Hinglish (romanised Hindi/English) message is answered in Hinglish — Latin script stays
-    Latin script; citations/locators are unchanged (LLD-RT-07).
+    Every language gets a firm, self-sufficient last-position instruction of equal strength — a bare
+    label let exemplar imitation override it (an English turn once recited the Hinglish exemplar). En
+    forbids Hindi/Hinglish; Hinglish pins the romanised register (no Devanagari, no pure-English
+    drift); Hindi gets a two-line written-Devanagari register reminder. All three close with the same
+    clause: examples show structure only, the reply language comes only from here. Unknown/None →
+    English. Citations/locators are unchanged in every case.
     """
-    name = _LANGUAGE_NAMES.get((language or "en").lower(), "English")
-    return f"Respond in {name}."
+    lang = (language or "en").lower()
+    return _RESPONSES.get(lang, _ENGLISH_RESPONSE)
 
 
 def english_query(complete: CompleteFn, query: str, language: str | None) -> str:

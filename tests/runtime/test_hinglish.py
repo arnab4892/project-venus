@@ -82,7 +82,9 @@ def test_response_language_is_current_turn_not_history():
         complete=_capture, prompt_body="P", history=hinglish_history,
         latest_user="What is the maximum capacity?", records=[], language="en",
     )
-    assert "Respond in English." in captured["system"]
+    # The firm English instruction (symmetric respond_in): forbids Hindi/Hinglish and pins the
+    # reply language to the instruction, so an English turn after Hinglish history stays English.
+    assert "Reply in English only." in captured["system"]
     assert "regardless of the language used in earlier messages" in captured["system"]
 
     compose_grounded_answer(

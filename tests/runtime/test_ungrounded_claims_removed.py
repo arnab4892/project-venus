@@ -81,6 +81,15 @@ def test_fallback_ships_in_visitor_language():
     assert gr.text == FALLBACK_TEXT
 
 
+def test_hi_fallback_is_register_pure():
+    """The hi fallback is a customer-facing Devanagari reply: it must carry no ordinary Latin word
+    outside the three persona exceptions (LLD-RT-07), by the same checker the eval gate uses."""
+    from agentkit.eval.runner import script_purity_offenders
+    from agentkit.runtime.grounding import _FALLBACK_TEXTS
+
+    assert script_purity_offenders(_FALLBACK_TEXTS["hi"]) == []
+
+
 def _match_record() -> ToolCallRecord:
     return ToolCallRecord(
         tr_id="tr1",

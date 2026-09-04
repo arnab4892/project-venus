@@ -102,3 +102,13 @@ def test_agent_hiccup_degrades_in_visitor_language(seeded_conn, new_session):
     result = run_turn(ctx, sid, "हाइड्रोजन, 3000 Nm3/hr, 350 bar")
     assert result.outcome == "clarify"
     assert result.messages[-1]["text"] == _HICCUP_TEXTS["hi"]
+
+
+def test_hi_clarify_and_hiccup_are_register_pure():
+    """The clarify and hiccup degrade strings ship as Devanagari replies precisely when a model
+    call has just failed — so their hi variants must be register-pure (LLD-RT-07), verified with the
+    same checker the eval gate uses."""
+    from agentkit.eval.runner import script_purity_offenders
+
+    assert script_purity_offenders(_CLARIFY_TEXTS["hi"]) == []
+    assert script_purity_offenders(_HICCUP_TEXTS["hi"]) == []

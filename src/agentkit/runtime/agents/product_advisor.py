@@ -31,8 +31,8 @@ _PRICE_HANDOFF_TEXTS = {
         "team who'll get you an accurate quotation — shall I?"
     ),
     "hi": (
-        "हम यहाँ कीमत या lead time नहीं देते, लेकिन मैं आपको हमारी commercial team से जोड़ सकता हूँ "
-        "जो आपको एक accurate quotation देंगे — क्या मैं जोड़ूँ?"
+        "हम यहाँ कीमत या डिलीवरी समय नहीं देते, लेकिन मैं आपको हमारी कमर्शियल टीम से जोड़ सकता हूँ "
+        "जो आपको सटीक कोटेशन देंगे — क्या मैं जोड़ूँ?"
     ),
     "hinglish": (
         "Hum yahan price ya lead time nahi dete, lekin main aapko hamari commercial team se connect "

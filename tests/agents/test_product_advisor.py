@@ -210,3 +210,13 @@ def test_price_ask_hands_off_in_visitor_language(seeded_conn, make_ctx, new_sess
     assert result.outcome == "handoff"
     assert result.messages[0]["text"] == _PRICE_HANDOFF_TEXTS["hi"]
     assert not any(ch.isdigit() for ch in result.messages[0]["text"])
+
+
+def test_hi_price_handoff_is_register_pure():
+    """The hi price/lead-time handoff is a fixed Devanagari reply — it must be register-pure
+    (LLD-RT-07), verified with the same checker the eval gate applies to the e2e-hindi-price
+    golden (whichever handoff path triage picks must be pure)."""
+    from agentkit.eval.runner import script_purity_offenders
+    from agentkit.runtime.agents.product_advisor import _PRICE_HANDOFF_TEXTS
+
+    assert script_purity_offenders(_PRICE_HANDOFF_TEXTS["hi"]) == []

@@ -43,9 +43,9 @@ _NOMATCH_TEMPLATES = {
         "I can connect you with our engineers for a tailored solution — shall I?"
     ),
     "hi": (
-        "मैं ऐसी कोई published compressor range पक्की नहीं कर पा रहा हूँ जो {gas} को "
-        "{capacity} {capacity_unit} और {discharge_p} bar पर cover करती हो।{note} "
-        "मैं आपको हमारे engineers से एक tailored solution के लिए जोड़ सकता हूँ — क्या मैं ऐसा करूँ?"
+        "मैं ऐसी कोई प्रकाशित कंप्रेसर श्रेणी पक्की नहीं कर पा रहा हूँ जो {gas} को "
+        "{capacity} {capacity_unit} और {discharge_p} bar पर कवर करती हो।{note} "
+        "मैं आपको हमारे इंजीनियरों से एक अनुकूलित समाधान के लिए जोड़ सकता हूँ — क्या मैं ऐसा करूँ?"
     ),
     "hinglish": (
         "Main koi aisi published compressor range confirm nahi kar pa raha hoon jo {gas} ko "
@@ -55,7 +55,7 @@ _NOMATCH_TEMPLATES = {
 }
 _NOMATCH_NOTE = {
     "en": " We do make related machines whose published data I can't directly compare to your duty.",
-    "hi": " हम कुछ related machines भी बनाते हैं जिनका published data मैं सीधे आपकी duty से compare नहीं कर सकता।",
+    "hi": " हम कुछ संबंधित मशीनें भी बनाते हैं जिनके प्रकाशित डेटा की सीधी तुलना मैं आपकी ड्यूटी से नहीं कर सकता।",
     "hinglish": (
         " Hum kuch related machines bhi banate hain jinka published data main seedhe aapki duty "
         "se compare nahi kar sakta."

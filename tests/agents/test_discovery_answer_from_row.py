@@ -159,3 +159,13 @@ def test_no_match_handoff_ships_in_visitor_language():
             gas="hydrogen", capacity=3000, capacity_unit="Nm3/hr", discharge_p=350,
             note=application_discovery._NOMATCH_NOTE["en"],
         )
+
+
+def test_hi_nomatch_template_prose_is_register_pure():
+    """The hi no-match handoff prose must be pure written Hindi (LLD-RT-07), asserted with the same
+    checker the eval gate uses. The `{...}` slots (the visitor's own gas/capacity/pressure values,
+    which stay English) are stripped by the checker, so this tests the hand-authored prose only."""
+    from agentkit.eval.runner import script_purity_offenders
+
+    assert script_purity_offenders(application_discovery._NOMATCH_TEMPLATES["hi"]) == []
+    assert script_purity_offenders(application_discovery._NOMATCH_NOTE["hi"]) == []

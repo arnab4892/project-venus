@@ -62,8 +62,8 @@ _CLARIFY_TEXTS = {
         "product details, company or document information, or service and spares?"
     ),
     "hi": (
-        "क्या आप थोड़ा और बता सकते हैं कि आपको क्या चाहिए — किसी specific gas/duty के लिए compressor, "
-        "product की जानकारी, company या document की जानकारी, या service और spares?"
+        "क्या आप थोड़ा और बता सकते हैं कि आपको क्या चाहिए — किसी ख़ास गैस/ड्यूटी के लिए कंप्रेसर, किसी "
+        "उत्पाद की जानकारी, कंपनी या दस्तावेज़ की जानकारी, या सर्विस और स्पेयर पार्ट्स?"
     ),
     "hinglish": (
         "Kya aap thoda aur bata sakte hain ki aapko kya chahiye — kisi specific gas/duty ke liye "
@@ -78,8 +78,8 @@ _HICCUP_TEXTS = {
         "discharge pressure you need?"
     ),
     "hi": (
-        "माफ़ कीजिए — मैं ठीक से समझ नहीं पाया। क्या आप दोबारा बता सकते हैं, या जो gas, flow और "
-        "discharge pressure चाहिए वो बता दें?"
+        "माफ़ कीजिए — मैं ठीक से समझ नहीं पाया। क्या आप दोबारा बता सकते हैं, या जो गैस, फ़्लो और "
+        "डिस्चार्ज प्रेशर चाहिए वो बता दें?"
     ),
     "hinglish": (
         "Maaf kijiye — main theek se samajh nahi paya. Kya aap dobara bata sakte hain, ya jo gas, "
