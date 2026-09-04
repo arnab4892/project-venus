@@ -22,7 +22,21 @@ from agentkit.config import Settings, get_settings
 from agentkit.extract.llm import CompleteFn, build_request_kwargs
 
 # Re-exported so runtime callers import the seam type + the schema-call driver from one place.
-__all__ = ["RuntimeClient", "build_runtime_client", "CompleteFn"]
+__all__ = ["RuntimeClient", "build_runtime_client", "CompleteFn", "compose_thinking_off"]
+
+
+def compose_thinking_off(knob: bool, schema_name: str, language: str | None) -> bool:
+    """Whether to send Qwen3/vLLM thinking-off for THIS call, given the ``LLM_DISABLE_THINKING``
+    knob, the schema name, and the reply language.
+
+    Thinking-off is scoped to the **compose** call (schema ``"answer"``) — triage and the per-agent
+    parse calls use other schema names and are never affected. It is further gated **per language**:
+    the Devanagari (``hi``) register needs compose reasoning at this model size, so ``hi`` **always
+    keeps thinking on** regardless of the knob; the knob only ever silences ``en`` / ``hinglish``
+    compose. A ``None`` language (an "answer" call that did not thread one) is treated as non-Hindi,
+    preserving the pre-per-language behaviour. Knob unset/false ⇒ thinking on everywhere.
+    """
+    return bool(knob) and schema_name == "answer" and language != "hi"
 
 
 @dataclass
@@ -67,7 +81,11 @@ class RuntimeClient:
         return self._client
 
     def raw_complete(
-        self, messages: list[dict[str, str]], json_schema: dict[str, Any], schema_name: str
+        self,
+        messages: list[dict[str, str]],
+        json_schema: dict[str, Any],
+        schema_name: str,
+        language: str | None = None,
     ) -> tuple[str, int, int, int]:
         """One schema-constrained chat completion → (text, tokens_in, tokens_out, cached_in)."""
         from agentkit.extract.llm import cached_input_tokens
@@ -80,9 +98,9 @@ class RuntimeClient:
             temperature=self.temperature,
             reasoning_effort=self.reasoning_effort,
             max_completion_tokens=self.max_completion_tokens,
-            # Thinking-off is scoped to the compose call — the final answer composition is the
-            # only runtime call using the "answer" schema (triage/parse have their own names).
-            disable_thinking=self.disable_thinking and schema_name == "answer",
+            # Thinking-off is scoped to the compose call ("answer" schema) AND to non-Hindi replies:
+            # the Devanagari register needs compose reasoning at this model size (compose_thinking_off).
+            disable_thinking=compose_thinking_off(self.disable_thinking, schema_name, language),
         )
         resp = self._openai().chat.completions.create(**kwargs)  # pragma: no cover
         usage = getattr(resp, "usage", None)
@@ -91,10 +109,17 @@ class RuntimeClient:
         return resp.choices[0].message.content or "", tin, tout, cached_input_tokens(usage)
 
     def complete_fn(self) -> CompleteFn:
-        """Return a ``CompleteFn`` (text-only) seam over :meth:`raw_complete` for the runtime."""
+        """Return a ``CompleteFn`` (text-only) seam over :meth:`raw_complete` for the runtime.
+
+        The compose site (``compose_grounded_answer``) sets a ``compose_language`` attribute on this
+        seam before its "answer" call, so the per-language thinking gate can see the reply language
+        without changing the shared 3-arg ``CompleteFn`` signature (same attribute idiom as
+        ``last_tokens``). Non-compose calls leave it unread (their schema is never "answer").
+        """
 
         def _complete(messages, json_schema, schema_name):  # pragma: no cover - live endpoint
-            text, *_ = self.raw_complete(messages, json_schema, schema_name)
+            language = getattr(_complete, "compose_language", None)
+            text, *_ = self.raw_complete(messages, json_schema, schema_name, language=language)
             return text
 
         return _complete

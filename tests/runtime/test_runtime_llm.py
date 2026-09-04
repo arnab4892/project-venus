@@ -122,6 +122,76 @@ def test_thinking_off_knob_off_leaves_compose_untouched() -> None:
     assert "extra_body" not in capture[-1]
 
 
+# --- per-language thinking gate (hi keeps thinking on), LLD-RT-07 --------------
+
+def test_compose_thinking_off_matrix() -> None:
+    from agentkit.runtime.llm import compose_thinking_off
+
+    # knob off ⇒ never thinking-off, whatever the schema/language
+    for lang in ("en", "hinglish", "hi", None):
+        assert compose_thinking_off(False, "answer", lang) is False
+    # knob on, compose call: en/hinglish are silenced; hi keeps thinking on; None ⇒ non-Hindi
+    assert compose_thinking_off(True, "answer", "en") is True
+    assert compose_thinking_off(True, "answer", "hinglish") is True
+    assert compose_thinking_off(True, "answer", "hi") is False
+    assert compose_thinking_off(True, "answer", None) is True
+    # knob on, non-compose calls (triage/parse) are never thinking-off, whatever the language
+    for name in ("triage", "product_query"):
+        for lang in ("en", "hinglish", "hi", None):
+            assert compose_thinking_off(True, name, lang) is False
+
+
+def test_raw_complete_keeps_thinking_on_for_hindi_compose() -> None:
+    capture: list = []
+    client = RuntimeClient(base_url="x", model="qwen3", disable_thinking=True)
+    client._client = _capturing_openai(capture)
+    msg = [{"role": "user", "content": "hi"}]
+
+    client.raw_complete(msg, {"type": "object"}, "answer", language="hi")
+    assert "extra_body" not in capture[-1]  # Devanagari compose thinks
+
+    client.raw_complete(msg, {"type": "object"}, "answer", language="en")
+    assert capture[-1]["extra_body"] == {"chat_template_kwargs": {"enable_thinking": False}}
+
+    client.raw_complete(msg, {"type": "object"}, "answer", language="hinglish")
+    assert capture[-1]["extra_body"] == {"chat_template_kwargs": {"enable_thinking": False}}
+
+
+def test_complete_fn_seam_reads_compose_language_attribute() -> None:
+    capture: list = []
+    client = RuntimeClient(base_url="x", model="qwen3", disable_thinking=True)
+    client._client = _capturing_openai(capture)
+    seam = client.complete_fn()
+    msg = [{"role": "user", "content": "hi"}]
+
+    seam.compose_language = "hi"
+    seam(msg, {"type": "object"}, "answer")
+    assert "extra_body" not in capture[-1]  # hi ⇒ thinking on
+
+    seam.compose_language = "en"
+    seam(msg, {"type": "object"}, "answer")
+    assert capture[-1]["extra_body"] == {"chat_template_kwargs": {"enable_thinking": False}}
+
+
+def test_compose_grounded_answer_sets_reply_language_on_the_seam() -> None:
+    # compose_grounded_answer must stamp the turn's reply language onto the complete seam so the
+    # per-language thinking gate can see it (base.py); asserted for a hi turn.
+    from agentkit.runtime.agents.base import compose_grounded_answer
+
+    class _Spy:
+        seen = "UNSET"
+
+        def __call__(self, messages, json_schema, schema_name):
+            self.seen = getattr(self, "compose_language", "UNSET")
+            return '{"message": "ठीक है", "citations": []}'
+
+    spy = _Spy()
+    compose_grounded_answer(
+        complete=spy, prompt_body="p", history=[], latest_user="q", records=[], language="hi",
+    )
+    assert spy.seen == "hi"
+
+
 def test_call_json_through_injected_complete_seam() -> None:
     calls: list[tuple] = []
 
