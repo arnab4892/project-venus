@@ -1,9 +1,10 @@
-# Golden question suite (LLD-EVAL-01). 55 questions (the initial 40 + a 6-question Gate-2
+# Golden question suite (LLD-EVAL-01). 58 questions (the initial 40 + a 6-question Gate-2
 # extension + prod-mch16-specs + adversarial-round faq-eiga / faq-founder / cap-false-memory +
 # cap-wellhead-natgas + the faq-api618 machine-standards routing regression + the polish-pass
 # docs-both-catalogues multi-card golden + the PRD-F-012 Hindi pair e2e-hindi-hydrogen /
-# e2e-hindi-price): 20 capability,
-# 14 product, 13 company/docs, 6 after-sales, 2 out-of-scope. Each carries the LLD-EVAL-01 fields
+# e2e-hindi-price + the presentation-shapes trio prod-overview-industrial /
+# prod-compare-process-natgas / prod-overview-industrial-hi): 20 capability,
+# 17 product, 13 company/docs, 6 after-sales, 2 out-of-scope. Each carries the LLD-EVAL-01 fields
 # (question, expected_answer_contains, expected_source_ids, expected_outcome) plus optional
 # `fact` / `retrieval` execution blocks the runner uses to score the fact and retrieval
 # layers against the LIVE active release. The e2e (agent-answer) layer is reported "pending"
@@ -459,6 +460,55 @@ questions:
       tool: get_product
       args: {model_or_family: "Fill Containment Cabinets"}
       expect_ids: ["fam.fill_containment_cabinet"]
+
+  - id: prod-overview-industrial
+    # Presentation shape (presentation-shapes): a broad division ask must ORIENT in 3–5 clusters,
+    # not enumerate with spec dumps. The must_not figure — 25000, the Process family's published
+    # max Nm³/hr — appears only in a per-family spec recitation and never in a faithful grouped
+    # overview, so it fails a spec-dump answer while the orienting shape passes. Family grounding is
+    # unchanged: list_products force-cites fam.process_recip (as in prod-list-industrial). Distinct
+    # from prod-list-industrial (which keeps its own contains-only assertion) — this adds the shape
+    # guard without weakening it.
+    question: "What do you offer in industrial compressors?"
+    expected_answer_contains: ["compressor"]
+    must_not_contain: ["25000"]
+    expected_source_ids: ["fam.process_recip"]
+    expected_outcome: answer
+    fact:
+      tool: list_products
+      args: {division: industrial}
+      expect_ids: ["fam.process_recip"]
+
+  - id: prod-compare-process-natgas
+    # Presentation shape (presentation-shapes): an explicit CROSS-FAMILY comparison must render an
+    # attribute table grounded per item via the multi-fetch (LLD-AG-02: structured lookup per item +
+    # a targeted retrieval per item, each compared family force-cited from the division listing).
+    # Cross-family by design — a same-family pair would pass without the multi-fetch and guard
+    # nothing. The pipe proves a Markdown table rendered (persona prose never emits '|'); the two
+    # nouns prove both columns. Proven groundable by the live trace (turn f0d5b413) and by the
+    # targeted per-item retrieval (process-spec + natural-gas-spec chunks both surface).
+    question: "Compare your process gas compressors and natural gas compressors."
+    expected_answer_contains: ["|", "process", "natural"]
+    expected_source_ids: ["fam.process_recip", "fam.natural_gas_recip"]
+    expected_outcome: answer
+
+  - id: prod-overview-industrial-hi
+    # Presentation shape × Hindi (presentation-shapes / LLD-RT-07): the clustered overview must hold
+    # in Devanagari too — answered, no spec recitation (must_not 25000), the Devanagari copula "है"
+    # anchoring a genuine Hindi reply. NB: `script_purity: hi` is deliberately NOT asserted here — a
+    # broad overview enumerates many gas names, an inherently large register-leak surface (gas/brand
+    # names the model tends to keep in Latin), so strict register on THIS shape is not deterministic;
+    # register purity stays guarded by the bounded existing e2e-hindi goldens (single-family duties).
+    # This golden guards the Hindi overview SHAPE (clustered orientation, no spec dump), robustly.
+    question: "आप औद्योगिक कंप्रेसर में क्या-क्या बनाते हैं?"
+    expected_answer_contains: ["है"]
+    must_not_contain: ["25000"]
+    expected_source_ids: ["fam.process_recip"]
+    expected_outcome: answer
+    fact:
+      tool: list_products
+      args: {division: industrial}
+      expect_ids: ["fam.process_recip"]
 
   # ---- company / docs (13) ------------------------------------------------
   - id: co-certifications

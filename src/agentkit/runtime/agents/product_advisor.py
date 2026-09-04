@@ -53,9 +53,28 @@ _PARSE_SYSTEM = (
     "'C-Monitor'; 'Tell me about the Diablo Piz escape breathing set' → 'Diablo Piz'; 'the CCDU "
     "compressor' → 'CCDU'; 'your fill containment cabinets' → 'Fill Containment Cabinets'. Use "
     "null when the visitor asks generally about a category/division (e.g. 'what industrial "
-    "compressors do you make', 'show me your diving equipment').\n"
+    "compressors do you make', 'show me your diving equipment') OR when compare_items is populated.\n"
     "- is_price_or_leadtime: true if they ask price, cost, discount or lead/delivery time.\n"
-    "- search_query: a concise English search phrase for the request."
+    "- search_query: a concise English search phrase for the request.\n"
+    "- compare_items: when the visitor EXPLICITLY asks to compare or contrast two or more NAMED "
+    "products/families ('compare X and Y', 'X vs Y', 'difference between X and Y'), the list of "
+    "those exact product/family names (2–4 items, generic words removed as above); an empty list "
+    "otherwise. A single product with sibling variants is NOT a comparison — leave it empty and "
+    "put the product in model_or_family."
+)
+
+# Compose directive for the explicit-comparison table (LLD-AG-02 presentation). Rows carry the
+# figure+unit together; a cell is filled ONLY from this turn's tool results; a row absent for one
+# item is dropped (never an empty / "Not specified" cell); each item's source is cited.
+_COMPARE_INSTRUCTION = (
+    "The visitor asked to COMPARE the named products/families. Compose a single Markdown "
+    "comparison table: one COLUMN per compared product (its exact bold display name from the tool "
+    "results), one ROW per attribute, each figure kept together with its unit in the cell. Fill a "
+    "cell ONLY from that product's tool results — never from memory, never invent a figure. If an "
+    "attribute is published for one product but not another, OMIT that row entirely; never write "
+    "'Not specified' or leave a cell blank. Cite the source each product's figures came from. "
+    "Close with one short sentence naming the key difference and a single question that moves the "
+    "enquiry forward."
 )
 
 
@@ -84,6 +103,57 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
 
     division = triage.get("division")
     division = division if division in ("industrial", "fire_rescue", "diving") else None
+
+    # Explicit comparison of 2+ named products/families (LLD-AG-02 multi-fetch). Ground each
+    # compared item BY DESIGN, not by retrieval co-occurrence luck: a structured lookup per item
+    # plus a TARGETED retrieval per item so each item's own specs surface and are citable to its
+    # own source. Product-level items (a model with rows, e.g. MCH-16) resolve via get_product and
+    # scope their search to the matched family; family-level items (the process / gas families
+    # carry capability rows but NO product rows, so get_product can't see them) are grounded by the
+    # division listing and searched division-scoped on the item name. Fewer than two items, or no
+    # division, → fall through to the standard single/overview path (co-occurrence fallback,
+    # unchanged). The listing is force-cited so every compared family is grounded per item.
+    compare_items = [c.strip() for c in (parse.get("compare_items") or []) if c and c.strip()][:4]
+    if len(compare_items) >= 2 and division is not None:
+        item_family: dict[str, str] = {}
+        structured_recs = []
+        for item in compare_items:
+            rec = tools.get_product(item)
+            prods = rec.result.get("products") or []
+            if prods:
+                structured_recs.append(rec)
+                item_family[item] = prods[0]["family_id"]
+        listing_rec = tools.list_products(division)
+        for item in compare_items:
+            q = english_query(ctx.complete, f"{item} specifications", language)
+            fam = item_family.get(item)
+            try:
+                if fam:
+                    tools.search_documents(q, family_ids=[fam], k=3)
+                else:
+                    tools.search_documents(q, division=division, k=3)
+            except Exception:  # noqa: BLE001 - missing retrieval infra ≠ a failure
+                pass
+        message, citations = compose_grounded_answer(
+            complete=ctx.complete,
+            prompt_body=prompt_body,
+            history=history,
+            latest_user=latest_user,
+            records=tools.records,
+            language=language,
+            extra_instruction=_COMPARE_INSTRUCTION,
+        )
+        # Force-cite each item's structured lookup + the division listing, so every compared
+        # family is grounded (a citation per compared item), not left to the compose LLM.
+        for rec in [*structured_recs, listing_rec]:
+            if rec.tr_id not in citations:
+                citations.append(rec.tr_id)
+        return AgentOutput(
+            action="answer",
+            draft_text=message,
+            citations=citations,
+            output={"action": "answer", "compare_items": compare_items},
+        )
 
     # Structured lookup (exact names + citable product/family ids), force-cited below so the
     # family id is always grounded. THEN always search the documents too — a question can ask

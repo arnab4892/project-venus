@@ -212,6 +212,72 @@ def test_price_ask_hands_off_in_visitor_language(seeded_conn, make_ctx, new_sess
     assert not any(ch.isdigit() for ch in result.messages[0]["text"])
 
 
+def _compare_fake(division: str, items: list[str], language: str = "en") -> FakeLLM:
+    return FakeLLM(
+        {
+            "triage": {
+                "division": division, "intent": "product_question", "language": language,
+                "in_scope": True, "pii_present": False, "confidence": 0.95,
+            },
+            "product_query": {
+                "model_or_family": None,
+                "is_price_or_leadtime": False,
+                "search_query": "compare " + " and ".join(items),
+                "compare_items": items,
+            },
+            # Number-free draft so the grounding numeric guard passes; the shape (table) is exercised
+            # live, the code path (fetch each + cite each) is what this test asserts.
+            "answer": {"message": "Here is a comparison of the two lines.", "citations": []},
+        }
+    )
+
+
+def test_compare_product_level_fetches_each_and_cites_each_family(
+    seeded_conn, make_ctx, new_session
+):
+    # Two NAMED cross-family products (MCH-6 in fam.mch_bac, VEGA in fam.lifting_bags) → the
+    # multi-fetch calls get_product per item and force-cites each so BOTH families are grounded —
+    # not left to retrieval co-occurrence (LLD-AG-02 comparison multi-fetch).
+    ctx = make_ctx(_compare_fake("fire_rescue", ["MCH-6", "VEGA"]))
+    sid = new_session()
+    result = run_turn(ctx, sid, "Compare the MCH-6 and the VEGA lifting bag.")
+
+    assert result.outcome == "answered"
+    # a get_product per named item + the division listing (family grounding backstop)
+    assert len(_tool_results(seeded_conn, sid, "get_product")) == 2
+    assert len(_tool_results(seeded_conn, sid, "list_products")) == 1
+    # each compared item's family is grounded (a citation per compared item, not one thin chunk)
+    fams = {c["ref_id"] for c in result.citations if c["kind"] == "family"}
+    assert {"fam.mch_bac", "fam.lifting_bags"} <= fams
+
+
+def test_compare_family_level_grounds_via_listing(seeded_conn, make_ctx, new_session):
+    # Family-level items (the industrial process/gas families carry capability rows but NO product
+    # rows, so get_product resolves nothing) are still grounded — by the division listing, which is
+    # force-cited so every compared family is nameable and cited. This is the process-vs-natural-gas
+    # shape of the golden, on the seeded release (fam.natgas_hbo / fam.process_recip).
+    ctx = make_ctx(_compare_fake("industrial", ["oxygen compressors", "natural gas compressors"]))
+    sid = new_session()
+    result = run_turn(ctx, sid, "Compare your oxygen compressors and natural gas compressors.")
+
+    assert result.outcome == "answered"
+    assert len(_tool_results(seeded_conn, sid, "list_products")) == 1
+    fams = {c["ref_id"] for c in result.citations if c["kind"] == "family"}
+    # the listing grounds every industrial family, so both compared families are cited
+    assert {"fam.oxygen_recip", "fam.natgas_hbo"} <= fams
+
+
+def test_single_product_path_unchanged_when_no_compare_items(seeded_conn, make_ctx, new_session):
+    # A normal single-product ask (compare_items empty via the default fake) still routes through
+    # get_product once — the multi-fetch branch does not fire (guards the fallthrough).
+    ctx = make_ctx(_fake("MCH-6"))
+    sid = new_session()
+    result = run_turn(ctx, sid, "Tell me about the MCH-6.")
+    assert result.outcome == "answered"
+    assert len(_tool_results(seeded_conn, sid, "get_product")) == 1
+    assert _tool_results(seeded_conn, sid, "list_products") == []
+
+
 def test_hi_price_handoff_is_register_pure():
     """The hi price/lead-time handoff is a fixed Devanagari reply — it must be register-pure
     (LLD-RT-07), verified with the same checker the eval gate applies to the e2e-hindi-price
