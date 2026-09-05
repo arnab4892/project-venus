@@ -52,12 +52,16 @@ class ToolRunner:
         gas_aliases: dict[str, str] | None = None,
         embed=None,
         settings: Settings | None = None,
+        session_id=None,
     ) -> None:
         self.conn = conn
         self.client = client
         self.gas_aliases = gas_aliases or {}
         self.embed = embed
         self.settings = settings or get_settings()
+        # The current session id (used by application_discovery to read its own prior duty from
+        # recorded tool calls for follow-up carry-forward); None outside a persisted turn.
+        self.session_id = session_id
         self.records: list[ToolCallRecord] = []
 
     def _run(self, tool: str, args: dict, fn) -> ToolCallRecord:
