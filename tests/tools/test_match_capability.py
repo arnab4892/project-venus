@@ -169,6 +169,44 @@ def test_scmd_unit_conversion(seeded_conn):
     assert match["headroom"]["capacity"] == pytest.approx(0.76)
 
 
+def test_converted_capacity_exposed_on_cross_unit_match(seeded_conn):
+    """Additive (LLD-TOOL-01, Fix 3): a family reached by unit conversion carries the tool-computed
+    converted duty, so the compose reconciles units from a sourced figure (no prose arithmetic).
+
+    Natural gas 1000 Nm³/hr against the SCMD-published cap.003 → 1000 × 24 = 24,000 SCMD.
+    """
+    result = match_capability(
+        seeded_conn,
+        gas="natural gas",
+        capacity=1000,
+        capacity_unit="Nm3/hr",
+        discharge_p=100,
+        lubricated=True,
+    )
+    match = result["matches"][0]
+    assert match["family_id"] == "fam.natgas_hbo"
+    assert match["same_unit"] is False
+    cv = match["converted_capacity"]
+    assert cv["value"] == pytest.approx(24000)
+    assert cv["unit"] == "SCMD"
+    assert cv["from"] == "Nm3/hr"
+
+
+def test_no_converted_capacity_on_same_unit_match(seeded_conn):
+    """A same-unit match omits converted_capacity — no conversion happened, nothing to reconcile."""
+    result = match_capability(
+        seeded_conn,
+        gas="hydrogen",
+        capacity=3000,
+        capacity_unit="Nm3/hr",
+        discharge_p=350,
+        lubricated=False,
+    )
+    match = result["matches"][0]
+    assert match["same_unit"] is True
+    assert "converted_capacity" not in match
+
+
 def test_active_views_follow_is_active(seeded_conn):
     """Copy r2026.08.1 as an inactive r-test with a different pressure ceiling; flipping
     ``is_active`` flips which release's values the ``active_*`` views (and the tool) serve."""

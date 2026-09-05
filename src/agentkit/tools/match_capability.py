@@ -215,6 +215,7 @@ def match_capability(
         near_edge = (cap_ratio is not None and cap_ratio > _NEAR_EDGE_RATIO) or (
             p_ratio is not None and p_ratio > _NEAR_EDGE_RATIO
         )
+        same_unit = canonical_capacity_unit(row["capacity_unit"]) == query_cap_unit
         match = {
             **base,
             "capacity_min": cap_min,
@@ -232,10 +233,20 @@ def match_capability(
             "near_edge": near_edge,
             # True when the family is published in the query's own capacity unit (no conversion) —
             # a stronger fit than a family reached only by converting units (ranked first).
-            "same_unit": canonical_capacity_unit(row["capacity_unit"]) == query_cap_unit,
+            "same_unit": same_unit,
         }
         if row["lubricated"] is None:
             match["lubricated_unspecified"] = True
+        # Additive result shape (LLD-TOOL-01, Fix 3): when this family is reached only by unit
+        # conversion (LLD-EXT-09), expose the tool-computed converted duty so the compose can state
+        # the reconciliation ("your 2,000 Nm³/hr — about 48,000 SCMD — sits inside …") from a sourced
+        # figure instead of doing prose arithmetic. Nothing reads this key for matching/ranking.
+        if not same_unit:
+            match["converted_capacity"] = {
+                "value": conv_capacity,
+                "unit": row["capacity_unit"],
+                "from": query_cap_unit,
+            }
         matches.append(match)
 
     matches.sort(key=_fit_key)

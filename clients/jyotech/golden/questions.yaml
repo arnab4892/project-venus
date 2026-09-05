@@ -115,7 +115,9 @@ questions:
     # never recites the wrong family's 25,000 (same-unit ranking + the all-message numeric guard).
     question: "Natural gas, 50000 SCMD, wellhead application, gas engine driven, 120 bar"
     expected_answer_contains: ["natural"]
-    must_not_contain: ["25000"]
+    # Tightening (slot-guard-conversion): the wrong Process-family match derived an unsourced 10×
+    # SCMD→Nm³/hr prose conversion (20,833 for the 50,000 SCMD duty); guard against that figure too.
+    must_not_contain: ["25000", "20833", "20,833"]
     expected_source_ids: ["fam.natural_gas_recip"]
     expected_outcome: answer
     fact:

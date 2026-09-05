@@ -60,6 +60,14 @@ def render_tool_context(records: list[ToolCallRecord]) -> str:
                 )
                 if m.get("standards"):
                     seg += f", standards {', '.join(m['standards'])}"
+                cv = m.get("converted_capacity")
+                if cv:
+                    # Tool-computed unit reconciliation (LLD-TOOL-01, Fix 3): the compose may state
+                    # this converted figure, never derive one (persona no-arithmetic rule).
+                    seg += (
+                        f" (the requested duty in {cv['from']} converts to "
+                        f"{format_number(cv['value'])} {cv['unit']} for this family)"
+                    )
                 if m.get("near_edge"):
                     seg += " [near a published limit]"
                 parts.append(seg)
