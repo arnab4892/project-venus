@@ -24,7 +24,11 @@ import re
 from sqlalchemy import text
 
 from agentkit.extract.llm import call_json
-from agentkit.runtime.agents.base import AgentOutput, compose_grounded_answer
+from agentkit.runtime.agents.base import (
+    AgentOutput,
+    compose_grounded_answer,
+    strip_empty_sources_trailer,
+)
 from agentkit.runtime.format import format_number
 from agentkit.runtime.grounding import spec_numbers
 from agentkit.runtime.language import respond_in
@@ -325,7 +329,9 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
         # answer-in-disguise the numeric guard would redact to a mutilated "up to … and …"), DISCARD
         # it and send the deterministic template (Fix 2). _SLOT_QUESTIONS is English-only — a
         # recorded residual (hi/hinglish slot templates flagged in the notes).
-        llm_msg = raw.get("message")
+        # Also strip a spurious empty "Sources: []" trailer the slot model sometimes echoes from the
+        # persona's provenance text — a clarifying question carries no citations (prompt-hygiene net).
+        llm_msg = strip_empty_sources_trailer(raw.get("message") or "")
         question = llm_msg if (llm_msg and not spec_numbers(llm_msg)) else _SLOT_QUESTIONS[missing]
         return AgentOutput(
             action="ask_slot",

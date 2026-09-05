@@ -476,3 +476,45 @@ def test_answer_missing_family_name_recomposes_then_fallback(seeded_conn, make_c
     assert result.outcome == "handoff"
     assert fake.seen.count("answer") == 2  # exactly one recompose
     assert "Process Gas Compressor" in result.messages[0]["text"]
+
+
+# ---- sources prompt-hygiene safety net (followup-carryforward) ----------------
+
+def test_strip_empty_sources_trailer_unit():
+    from agentkit.runtime.agents.base import strip_empty_sources_trailer as s
+
+    assert s("What flow do you need?\n\nSources: []") == "What flow do you need?"
+    assert s("What flow do you need?\nSources:") == "What flow do you need?"
+    assert s("Q?\n\nSource: none") == "Q?"
+    assert s("Q?\nSources: (none)") == "Q?"
+    assert s("Q?\nSources: —") == "Q?"
+    assert s("Q?\nSources: N/A") == "Q?"
+    # conservative: a line naming real sources is preserved
+    assert s("Answer.\nSources: Process catalogue p5") == "Answer.\nSources: Process catalogue p5"
+    # no-op when there is no sources line
+    assert s("Just a plain question?") == "Just a plain question?"
+    assert s("") == ""
+
+
+def test_ask_slot_strips_empty_sources_trailer(seeded_conn, make_ctx, new_session):
+    # The observed leak: the slot model echoes the persona's provenance text as a "Sources: []"
+    # trailer. It must be stripped so the customer sees only the question — no citations on a
+    # clarifying turn (still asked_slot, still no match_capability).
+    fake = FakeLLM({
+        "triage": {"division": "industrial", "intent": "application_enquiry", "language": "en",
+                   "in_scope": True, "pii_present": False, "confidence": 0.95},
+        "application_slots": {
+            "gas": "hydrogen", "capacity": None, "capacity_unit": None, "discharge_p": None,
+            "lubricated": None, "standard": None, "industry": None, "timeline": None,
+            "asked_slot": "capacity",
+            "message": "Yes — what flow rate do you need, in Nm³/hr (or kg/hr / SCMD)?\n\nSources: []",
+        },
+    })
+    ctx = make_ctx(fake)
+    sid = new_session()
+    result = run_turn(ctx, sid, "We need to compress hydrogen at our plant — can you help?")
+    assert result.outcome == "asked_slot"
+    assert _tool_names(seeded_conn, sid) == []
+    text = result.messages[0]["text"]
+    assert "Sources" not in text and "Source:" not in text
+    assert "what flow rate do you need" in text.lower()

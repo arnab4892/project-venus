@@ -148,6 +148,27 @@ def looks_like_absence(text: str) -> bool:
     return bool(_ABSENCE_RE.search(text or ""))
 
 
+# A model sometimes appends a spurious, EMPTY "Sources:" line to a NON-answer reply (a slot/clarify
+# question), echoing the persona's citation talk even though such replies carry no citations — the
+# real Sources panel is built from structured `citations` on answer turns only, never from this text.
+# Strip a TRAILING sources declaration ONLY when it lists nothing; a line naming real sources is left
+# untouched (conservative — never silently drop named provenance).
+_EMPTY_SOURCES_RE = re.compile(
+    r"(?:\r?\n)*[ \t]*sources?[ \t]*:[ \t]*"
+    r"(?:\[[ \t]*\]|\([ \t]*none[ \t]*\)|none|n/?a|—|-|\.)?[ \t]*$",
+    re.IGNORECASE,
+)
+
+
+def strip_empty_sources_trailer(text: str) -> str:
+    """Remove a trailing, EMPTY 'Sources:'/'Source:' line (and any preceding blank lines) from a
+    NON-answer reply. Leaves a 'Sources:' line that lists real content untouched. Not for the answer
+    path — the structured Sources panel is unaffected (it never comes from message text)."""
+    if not text:
+        return text
+    return _EMPTY_SOURCES_RE.sub("", text).rstrip()
+
+
 def compose_grounded_answer(
     *,
     complete: CompleteFn,

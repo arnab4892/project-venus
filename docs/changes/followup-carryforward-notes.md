@@ -147,6 +147,28 @@ bar/barg, not SCMD), never match/answer on it. It also happens to be the input t
 triggered the temp=1 compose degeneracy above. Add it when the suite gains the multi-turn / clarify
 golden mechanism (M6, with `followup_turns[]`).
 
+## Sources prompt hygiene — no `Sources:` line on non-answer replies
+
+A live dev-UI turn — *"We need to compress hydrogen at our plant — can you help?"* — returned a slot
+question with a literal `Sources: []` trailer. Verified from `ops` + Langfuse: the string is in the
+**slot-extraction model's `message` field** (deterministic — it persisted at `temperature=0`), NOT the
+structured Sources panel (`payload.sources` empty). Root cause: the shared **persona is prepended to
+the slot-extraction call**, and its Provenance section talks about `citations` "which the UI renders as
+a separate Sources list" — the slot model echoes that as a `Sources:` line even though a slot question
+has no citations. The Fix-2 ask_slot hygiene only discards a message carrying a spec-number, so a
+number-free `Sources: []` passed through.
+
+- **Prompt hygiene (primary):** `_persona.md` Provenance gains a rule — provenance belongs only to a
+  concrete grounded answer; a clarifying/slot question (or any non-answer reply) cites nothing and
+  carries no `Sources`/`Source:` line (not even an empty `Sources: []`); the UI's Sources list comes
+  from structured `citations` on answer turns only, never typed text. Reinforced in
+  `application_discovery.md` (the slot `message` is a plain question, no sources line).
+- **Conservative safety-net:** `base.py::strip_empty_sources_trailer` removes a **trailing, EMPTY**
+  `Sources:`/`Source:` line (`[]` / `none` / `(none)` / `n/a` / `—`), and **preserves** a line naming
+  real sources. Applied to the LLM-generated non-answer messages only — `application_discovery` and
+  `after_sales_intake` ask_slot, and `deflect`. The answer-only structured Sources path
+  (`resolve_sources` → `payload.sources`) is untouched.
+
 ## Rule-6 flags (for the next doc pass)
 - **LLD-AG-01**: follow-up carry-forward — merge newly extracted slots over the session's prior
   `match_capability` args (full restatement inherits nothing; unitless new flow is asked, not guessed;
