@@ -407,6 +407,57 @@ def test_guards_run_after_merge_strip_invented_lubricated(seeded_conn, make_ctx,
     assert all(c["lubricated"] is None for c in calls)  # never a token → always stripped
 
 
+def test_prior_duty_fail_open_on_read_error():
+    # The carry-forward read is a bolt-on — any exception must be swallowed (log + None), never
+    # raised, so the turn proceeds without inheritance.
+    from agentkit.runtime.agents.application_discovery import _prior_duty
+
+    class _CM:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    class _RaisingConn:
+        def begin_nested(self):
+            return _CM()
+
+        def execute(self, *a, **k):
+            raise RuntimeError("db exploded")
+
+    assert _prior_duty(_RaisingConn(), "sess") is None
+
+
+def test_carry_forward_read_failure_does_not_break_the_turn(seeded_conn, make_ctx, new_session):
+    # A real conn where ONLY the prior-duty read (its distinctive SQL) raises — the follow-up turn
+    # must still complete (the savepoint rolls the failed read back; the shared transaction survives).
+    import dataclasses
+
+    ctx = make_ctx(_followup_fake(
+        {"gas": None, "capacity": 80000, "capacity_unit": "SCMD", "discharge_p": None,
+         "lubricated": None, "standard": None, "industry": None, "timeline": None,
+         "asked_slot": None, "message": ""}))
+    sid = new_session()
+    run_turn(ctx, sid, _TURN1)  # persists turn 1's match_capability
+
+    class _Proxy:
+        def __init__(self, real):
+            self._real = real
+
+        def execute(self, statement, *a, **k):
+            if "ORDER BY t.seq DESC" in str(statement):  # the _prior_duty read
+                raise RuntimeError("simulated prior-duty read failure")
+            return self._real.execute(statement, *a, **k)
+
+        def __getattr__(self, name):
+            return getattr(self._real, name)
+
+    ctx2 = dataclasses.replace(ctx, conn=_Proxy(seeded_conn))
+    r2 = run_turn(ctx2, sid, "What about 80000 SCMD?", history=_hist(_TURN1))
+    assert r2.outcome in ("answered", "asked_slot", "handoff")  # completed, did not crash
+
+
 def test_answer_missing_family_name_recomposes_then_fallback(seeded_conn, make_ctx, new_session):
     # A "no results" denial composed despite a real match (turn 74d45612) → recompose once, then
     # the honest fallback naming the family (never ship a tool-denial).

@@ -174,28 +174,39 @@ def _prior_duty(conn, session_id) -> dict | None:
     """
     if session_id is None or conn is None:
         return None
-    rows = conn.execute(
-        text(
-            "SELECT t.seq, tc.args FROM ops.tool_call tc "
-            "JOIN ops.agent_invocation ai ON ai.inv_id = tc.inv_id "
-            "JOIN ops.turn t ON t.turn_id = ai.turn_id "
-            "WHERE t.session_id = :sid AND tc.tool = 'match_capability' "
-            "ORDER BY t.seq DESC"
-        ),
-        {"sid": session_id},
-    ).all()
-    if not rows:
+    # Fail-open, like every other bolt-on read (sources resolver, tracing): the carry-forward read
+    # must never break the turn. The SELECT runs inside a SAVEPOINT so a DB error rolls back only
+    # this read and cannot poison the turn's transaction (match_capability shares the connection);
+    # any exception — DB, or a malformed args row — logs and returns None (no inheritance this turn).
+    try:
+        with conn.begin_nested():
+            rows = conn.execute(
+                text(
+                    "SELECT t.seq, tc.args FROM ops.tool_call tc "
+                    "JOIN ops.agent_invocation ai ON ai.inv_id = tc.inv_id "
+                    "JOIN ops.turn t ON t.turn_id = ai.turn_id "
+                    "WHERE t.session_id = :sid AND tc.tool = 'match_capability' "
+                    "ORDER BY t.seq DESC"
+                ),
+                {"sid": session_id},
+            ).all()
+        if not rows:
+            return None
+        top_seq = rows[0][0]
+        prior: dict = {}
+        for seq, args in rows:
+            if seq != top_seq:
+                break
+            a = args if isinstance(args, dict) else json.loads(args)
+            for k in _DUTY_KEYS:
+                if prior.get(k) is None and a.get(k) is not None:
+                    prior[k] = a[k]
+        return prior or None
+    except Exception:  # noqa: BLE001 - fail-open: a carry-forward read failure never breaks the turn
+        logger.warning(
+            "carry-forward: prior-duty read failed; proceeding without inheritance", exc_info=True
+        )
         return None
-    top_seq = rows[0][0]
-    prior: dict = {}
-    for seq, args in rows:
-        if seq != top_seq:
-            break
-        a = args if isinstance(args, dict) else json.loads(args)
-        for k in _DUTY_KEYS:
-            if prior.get(k) is None and a.get(k) is not None:
-                prior[k] = a[k]
-    return prior or None
 
 
 def _merge_followup(slots: dict, prior: dict, latest_user: str) -> dict:

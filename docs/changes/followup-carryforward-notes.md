@@ -97,12 +97,66 @@ Fix 2 swap path. Converting the slot templates to per-language (en/hi/hinglish) 
 grouped with the other fixed customer-facing strings (grounding fallback, clarify, no-match, price
 handoff) that are already per-language.
 
+## Live instability investigation (dev-UI turns during the eval window, 2026-09-05)
+
+Four reported symptoms diagnosed from `ops.*` + Langfuse (`events_full`, since the Langfuse worker
+had **not** materialised the `observations` table — 0 rows, 2 traces; the raw generations were only in
+`events_full`). Server: **vLLM 0.28.0** at `103.48.50.161:8000`, model **`cyankiwi/Qwen3.8-27B-AWQ-INT4`**
+(AWQ INT4 quantized). All four turns ran the new `application_discovery.25`.
+
+**(a) "content filter" / (b) "…tool use(s) were not executed … malformed … Please retry." / (c)
+"The server had an error …":** these are NOT API or harness failures. The compose call returned
+**HTTP 200 with valid, schema-conforming JSON** — e.g. `fd73a36a` →
+`{"message":"content filter","citations":[]}`, `70ca4ac2` →
+`{"message":"The server had an error while processing your request. …"}`, `797de6d3` →
+`{"message":"The following tool use(s) were not executed: search_documents … malformed. Please retry."}`.
+Guided decoding **succeeded**; the **model filled the `message` string with memorised error-boilerplate**.
+`match_capability` + `search_documents` ran fine (rows 1 / 2); the grounding gate passed the strings
+(no figures, and the match is force-cited), so they shipped as `answered`. The generation ran at
+**`temperature: 1, top_p: 1`** — because the runtime `llm_temperature` is **unset** (`None`), so no
+temperature is sent and the SDK/vLLM default of `1` applies. High temperature on the INT4-quantized
+model is the degeneracy driver; the confusing input for (a)/(c) — *"What if the discharge pressure is
+24000 SCMD?"* (a **flow unit on a pressure**) — is the trigger. **(c) is model-generated content
+shipped as an answer, not a harness crash** (a real crash would not persist a turn to `ops`).
+
+These boilerplate strings are a **distinct class** from the "no results / tool-failed" denial the
+Fix-3 backstop catches — they are not denial-shaped, so the backstop does not (and by design should
+not) fire on them.
+
+**(d) "Failed to advance FSM for request … Please file an issue":** a **separate** vLLM
+**guided-decoding** failure, and a different failure mode from (a)–(c): an FSM failure produces
+invalid/degenerate output → `call_json` retries → `ExtractionSkipped` → the orchestrator's clarify/
+hiccup degrade — it does **not** yield the valid JSON seen above. The log line is on the **remote**
+vLLM host (not locally accessible). "advance **FSM**" indicates an **FSM-based guided-decoding backend
+(outlines / lm-format-enforcer)**, not xgrammar.
+
+**Remedies (proposed, not applied here):**
+- **Server-side for (d):** restart the vLLM server; confirm and prefer `--guided-decoding-backend
+  xgrammar` (grammar-compiler, more robust than the FSM-based outlines/lm-format-enforcer on quantized
+  models); consider that AWQ-INT4 quantization aggravates FSM instability; pin/upgrade vLLM if the FSM
+  bug is version-specific. Operator action — the server is remote; confirm from its startup args + log.
+- **For (a)–(c) (config / suite, not runtime code):** set a low compose **`LLM_TEMPERATURE` (0–0.2)** —
+  this is the biggest lever against the boilerplate degeneracy (re-certify the gate after); and add the
+  clarification golden below. The `application_discovery` code (carry-forward / merge / backstop) ran
+  correctly on these turns — the failure is entirely in the compose model output.
+
+## For the next suite extension (item 4)
+**"What if the discharge pressure is 24000 SCMD?"** — a **flow unit (SCMD) on the pressure slot** — is a
+good future **clarification golden**: the turn should ask a short clarifying question (a pressure is in
+bar/barg, not SCMD), never match/answer on it. It also happens to be the input that most reliably
+triggered the temp=1 compose degeneracy above. Add it when the suite gains the multi-turn / clarify
+golden mechanism (M6, with `followup_turns[]`).
+
 ## Rule-6 flags (for the next doc pass)
 - **LLD-AG-01**: follow-up carry-forward — merge newly extracted slots over the session's prior
   `match_capability` args (full restatement inherits nothing; unitless new flow is asked, not guessed;
   answer restates the merged duty); ask_slot messages carrying spec-numbers are replaced by the
   deterministic template; a "no results / tool failed" answer despite a match is recomposed once then
   falls back honestly (denial detection). `ToolRunner` gains `session_id`.
+- **LLD-AG-01 (hardening)**: `_prior_duty` is fully **fail-open** — the read runs inside a SAVEPOINT
+  (so a DB error rolls back only the read, never poisoning the turn's shared transaction) and any
+  exception logs + returns `None`; the turn proceeds without inheritance (same posture as the sources
+  resolver / tracing bolt-ons).
 - **LLD-TOOL-01**: `converted_capacity.value` is rounded to a whole unit for presentation so the
   compose's reconciliation figure is sourced under the numeric guard (internal `conv_capacity`
   unchanged).
