@@ -243,7 +243,11 @@ def match_capability(
         # figure instead of doing prose arithmetic. Nothing reads this key for matching/ranking.
         if not same_unit:
             match["converted_capacity"] = {
-                "value": conv_capacity,
+                # Rounded to a whole unit for PRESENTATION so the figure the compose states matches
+                # this sourced value under the numeric guard (an SCMD→Nm³/hr conversion is fractional;
+                # 80,000 SCMD → 3,333 Nm³/hr, not 3,333.33). The internal conv_capacity used for the
+                # envelope/headroom math is unchanged — only this display field is rounded.
+                "value": round(conv_capacity),
                 "unit": row["capacity_unit"],
                 "from": query_cap_unit,
             }
