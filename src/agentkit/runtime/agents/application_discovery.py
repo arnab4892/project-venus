@@ -17,6 +17,7 @@ demo seed has no chunks) the agent answers from the capability match alone, neve
 
 from __future__ import annotations
 
+import logging
 import re
 
 from agentkit.extract.llm import call_json
@@ -26,6 +27,8 @@ from agentkit.runtime.language import respond_in
 from agentkit.runtime.ops import MessageRecord
 from agentkit.runtime.schemas import APPLICATION_SCHEMA
 from agentkit.runtime.triage import build_chat_messages
+
+logger = logging.getLogger(__name__)
 
 _SLOT_QUESTIONS = {
     "gas": "Which gas do you need to compress?",
@@ -80,6 +83,63 @@ _REEXTRACT_INSTRUCTION = (
 def _message_has_full_duty(text: str) -> bool:
     """True if the message already states a flow-with-units AND a pressure (a complete duty)."""
     return bool(_CAP_RE.search(text or "") and _PRES_RE.search(text or ""))
+
+
+# Token guards for the OPTIONAL filter slots (LLD-AG-01, Fix 1b). An inferred `lubricated` /
+# `standard` is kept only when the visitor actually stated a matching token — a prime-mover phrase
+# like "gas engine driven" is NOT a lubrication statement, and keeping the invented `lubricated=false`
+# silently excludes a Lubricated family (the turn 8fdc353f miss). The relaxation retry only catches an
+# EMPTY match, not the wrong-but-nonempty match a false filter produces, so this pre-match guard is
+# the fix.
+_LUBRICATION_RE = re.compile(
+    # Latin (en + hinglish): oil-free / oilless / non-lube / lube / the "lubric" stem — never bare
+    # "oil" (so "oilfield gas" must not validate a filter). Plus Devanagari (hi) forms.
+    r"oil[\s-]?free|oil[\s-]?less|non[\s-]?lube|lube|lubric"
+    r"|ऑयल[\s-]?फ्री|ऑइल[\s-]?फ्री|लुब्रिकेटेड|नॉन[\s-]?लुब्रिकेटेड|तेल[\s-]?मुक्त",
+    re.IGNORECASE,
+)
+# Standard codes are Latin in every script (register rule). The acronyms are never ordinary words in
+# any capitalisation → case-insensitive. The ambiguous short codes need an adjacent digit AND
+# uppercase, else ordinary English validates a hallucinated filter ("capacity is 3000" → is+digit).
+_STANDARD_ACRONYM_RE = re.compile(
+    r"\b(?:api|iso|asme|atex|ped|nfpa|eiga|din|ansi|iec)\b", re.IGNORECASE
+)
+_STANDARD_SHORT_RE = re.compile(r"\b(?:EN|IS|BS|BIS)[\s-]?\d")  # case-sensitive UPPERCASE
+
+
+def _message_states_lubrication(text: str) -> bool:
+    """True if the text explicitly states a lubrication preference (any supported script)."""
+    return bool(_LUBRICATION_RE.search(text or ""))
+
+
+def _message_states_standard(text: str) -> bool:
+    """True if the text names a standard/certification code (Latin, per the register rules)."""
+    t = text or ""
+    return bool(_STANDARD_ACRONYM_RE.search(t) or _STANDARD_SHORT_RE.search(t))
+
+
+def _guard_inferred_filters(slots: dict, latest_user: str, history: list[dict]) -> dict:
+    """Null an over-inferred `lubricated` / `standard` slot the visitor never actually stated.
+
+    Scans the current message PLUS prior USER turns (a preference stated earlier must survive);
+    assistant turns are deliberately not scanned — echoing the bot's own offer back would validate
+    nearly any hallucinated filter. Returns the discarded {slot: value} for tracing. Mutates `slots`.
+    """
+    convo = " ".join(
+        [latest_user or ""] + [m.get("text") or "" for m in history if m.get("role") == "user"]
+    )
+    stripped: dict = {}
+    if slots.get("lubricated") is not None and not _message_states_lubrication(convo):
+        stripped["lubricated"] = slots["lubricated"]
+        slots["lubricated"] = None
+    if slots.get("standard") is not None and not _message_states_standard(convo):
+        stripped["standard"] = slots["standard"]
+        slots["standard"] = None
+    for slot, value in stripped.items():
+        # Observability: every strip is traced (which slot, the discarded value) so the accepted
+        # user-turns-only limitation's real-world frequency is measurable; logging is fail-open.
+        logger.info("slot-guard: stripped %s=%r (no %s token in visitor turns)", slot, value, slot)
+    return stripped
 
 
 def _extract_slots(raw: dict) -> dict:
@@ -142,6 +202,10 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
             output={**raw, "asked_slot": missing},
         )
 
+    # Guard the OPTIONAL filter slots BEFORE matching: strip an inferred lubricated/standard the
+    # visitor never stated, so a prime-mover phrase ("gas engine driven") can't inject a false filter.
+    stripped_slots = _guard_inferred_filters(slots, latest_user, history)
+
     # Required slots present → match the duty against the published envelope.
     match_rec = tools.match_capability(
         gas=slots["gas"],
@@ -193,6 +257,7 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
             output={
                 "action": "handoff", "reason": "no_match",
                 "non_comparable": [c.get("family_name") for c in non_comparable],
+                **({"stripped_slots": stripped_slots} if stripped_slots else {}),
             },
         )
 
@@ -248,5 +313,6 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
             "action": "answer",
             "matched_family_id": top["family_id"],
             "near_edge": top.get("near_edge"),
+            **({"stripped_slots": stripped_slots} if stripped_slots else {}),
         },
     )
