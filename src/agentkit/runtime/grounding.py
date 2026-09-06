@@ -259,6 +259,15 @@ def _citations_from_record(rec: ToolCallRecord, answer_text: str | None = None) 
             add("document", p.get("source_doc_id"), locator=p.get("source_locator"))  # its source doc
         for fam in r.get("families", []):  # list_products groups by family
             add("family", fam.get("family_id"))
+        # get_product family-envelope (capability-only family): cite the family + each capability row
+        # supplying the published figures + its source doc — honest-parent derivation of the cited
+        # result, exactly as the match_capability branch does for a matched row.
+        fam = r.get("family")
+        if fam is not None:
+            add("family", fam.get("family_id"), locator=fam.get("source_locator"))
+            for c in r.get("capabilities", []):
+                add("capability", c.get("cap_id"))
+                add("document", c.get("source_doc_id"), locator=c.get("source_locator"))
     elif rec.tool == "get_office":
         office = r.get("office")
         if office:

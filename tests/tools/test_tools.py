@@ -89,6 +89,47 @@ def test_get_product_null_model_from_db(seeded_conn):
     assert "Diaphragm Compressor — high-pressure" in names
 
 
+def test_get_product_family_envelope_from_capability_rows(seeded_conn):
+    # A capability-only family (process/gas: capability rows, NO product rows) is invisible to the
+    # product-anchored matching, so it now resolves via the family-envelope fall-through: the
+    # published limits come verbatim from its capability rows, force-citable by family + cap ids.
+    for query in ("Process Gas Compressor", "fam.process_recip"):  # by name AND by id
+        result = get_product(seeded_conn, query)
+        assert result["matched_by"] == "family_envelope", query
+        assert result["products"] == []
+        assert result["family"]["family_id"] == "fam.process_recip"
+        caps = result["capabilities"]
+        assert caps, "the process family publishes capability rows"
+        cap = caps[0]
+        assert cap["capacity_max"] == 20000 and cap["capacity_unit"] == "Nm3/hr"  # seed cap.002
+        assert cap["discharge_p_max"] == 1000 and cap["pressure_unit"] == "barg"
+        assert "hydrogen" in cap["gases"]
+        assert cap["cap_id"] == "cap.002"
+
+
+def test_get_product_empty_envelope_family_resolves_without_figures(seeded_conn):
+    # A family that resolves by name but publishes ZERO capability rows (e.g. fuelling systems) must
+    # still return a well-defined envelope — family present, capabilities: [] — never None/crash.
+    result = get_product(seeded_conn, "Hydrogen Fuelling System")
+    assert result["matched_by"] == "family_envelope"
+    assert result["family"]["family_id"] == "fam.h2_fuelling"
+    assert result["capabilities"] == []
+
+
+def test_get_product_product_match_carries_no_envelope(seeded_conn):
+    # A real model/family-with-products lookup is byte-identical to before: products, no envelope key.
+    result = get_product(seeded_conn, "mch6")
+    assert result["matched_by"] == "model" and result["products"]
+    assert "family" not in result and "capabilities" not in result
+
+
+def test_get_product_unknown_name_no_envelope(seeded_conn):
+    # An unmatched name resolves to nothing on the envelope path too — no fabricated family.
+    result = get_product(seeded_conn, "some unrelated widget")
+    assert result["matched_by"] is None and result["products"] == []
+    assert "family" not in result
+
+
 # --- list_products ----------------------------------------------------------
 
 

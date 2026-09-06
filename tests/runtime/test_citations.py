@@ -78,6 +78,66 @@ def test_company_fact_citation_has_locator():
     assert fact_cites[0].locator == "§Certifications"
 
 
+def _envelope_record() -> ToolCallRecord:
+    # get_product family-envelope shape (capability-only family, no product rows).
+    return ToolCallRecord(
+        tr_id="tr3",
+        tool="get_product",
+        args={"model_or_family": "Process Compressors (Recip.)"},
+        result={
+            "query": "Process Compressors (Recip.)",
+            "matched_by": "family_envelope",
+            "products": [],
+            "family": {
+                "family_id": "fam.process_recip",
+                "family_name": "Process Compressors (Recip.)",
+                "category": "Process Gas Compressors",
+                "division": "industrial",
+                "summary": None,
+                "source_doc_id": "doc.jyotech_catalog_process",
+                "source_locator": "p4-5 §PROCESS COMPRESSORS (RECIP.)",
+            },
+            "capabilities": [
+                {
+                    "cap_id": "cap.process.0",
+                    "comp_type": "Reciprocating",
+                    "lubricated": None,
+                    "cooling": "water",
+                    "capacity_min": None,
+                    "capacity_max": 25000,
+                    "capacity_unit": "Nm3/hr",
+                    "discharge_p_min": None,
+                    "discharge_p_max": 1000,
+                    "pressure_unit": "barg",
+                    "standards": ["API-618 or equivalent"],
+                    "driver": [],
+                    "gases": ["hydrogen", "hydrocarbon gas"],
+                    "source_doc_id": "doc.jyotech_catalog_process",
+                    "source_locator": "p4-5 §PROCESS COMPRESSORS (RECIP.)",
+                }
+            ],
+        },
+        rows_returned=1,
+        latency_ms=1,
+    )
+
+
+def test_family_envelope_cites_family_capability_and_document():
+    # The envelope's published figure is sourced from the tool result and its ids are derived as
+    # honest parents: the family, each capability row, and its source document.
+    gr = ground_answer(
+        "Our published maximum for that range is 25,000 Nm³/hr [tr3].",
+        ["tr3"],
+        [_envelope_record()],
+        ["are you sure it wasn't 30000?"],
+    )
+    assert gr.ok  # 25,000 is sourced from the capability row + the result is cited
+    kinds = {(c.kind, c.ref_id) for c in gr.citations}
+    assert ("family", "fam.process_recip") in kinds
+    assert ("capability", "cap.process.0") in kinds
+    assert ("document", "doc.jyotech_catalog_process") in kinds
+
+
 def test_only_cited_results_become_citations():
     # cite only tr1 though two records are present → tr2's fact is NOT cited. The cited chunk
     # also yields its parent document (honest parent-derivation), but the uncited fact never

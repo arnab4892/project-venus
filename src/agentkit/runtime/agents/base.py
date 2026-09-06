@@ -94,6 +94,32 @@ def render_tool_context(records: list[ToolCallRecord]) -> str:
             )
             lines.append(f"[{rec.tr_id}] get_company_fact {rec.args.get('kind')} :: {facts}")
         elif rec.tool == "get_product":
+            fam = r.get("family")
+            if fam is not None:  # family-envelope result (capability-only family, no product rows)
+                caps = r.get("capabilities") or []
+                if caps:
+                    segs = []
+                    for c in caps:
+                        seg = (
+                            f"capacity up to {format_number(c.get('capacity_max'))} "
+                            f"{c.get('capacity_unit')}, discharge up to "
+                            f"{format_number(c.get('discharge_p_max'))} {c.get('pressure_unit')}"
+                        )
+                        if c.get("standards"):
+                            seg += f", standards {', '.join(c['standards'])}"
+                        if c.get("comp_type"):
+                            seg += f", type {c['comp_type']}"
+                        if c.get("gases"):
+                            seg += f", gases {', '.join(c['gases'])}"
+                        segs.append(seg)
+                    body = " | ".join(segs)
+                else:  # a family that resolved but publishes no envelope figures
+                    body = _truncate(fam.get("summary"), 200) or "no published envelope figures"
+                lines.append(
+                    f"[{rec.tr_id}] get_product family={fam.get('family_id')} "
+                    f"{fam.get('family_name')} :: {body}"
+                )
+                continue
             for p in r.get("products", []):
                 seg = p.get("display_name") or p.get("family_name") or p.get("family_id")
                 if p.get("variant") and p["variant"].lower() not in (seg or "").lower():
