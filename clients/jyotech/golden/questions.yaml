@@ -1,9 +1,10 @@
-# Golden question suite (LLD-EVAL-01). 58 questions (the initial 40 + a 6-question Gate-2
+# Golden question suite (LLD-EVAL-01). 59 questions (the initial 40 + a 6-question Gate-2
 # extension + prod-mch16-specs + adversarial-round faq-eiga / faq-founder / cap-false-memory +
 # cap-wellhead-natgas + the faq-api618 machine-standards routing regression + the polish-pass
 # docs-both-catalogues multi-card golden + the PRD-F-012 Hindi pair e2e-hindi-hydrogen /
 # e2e-hindi-price + the presentation-shapes trio prod-overview-industrial /
-# prod-compare-process-natgas / prod-overview-industrial-hi): 20 capability,
+# prod-compare-process-natgas / prod-overview-industrial-hi + cap-false-memory-product, the
+# product-route envelope-lookup twin): 21 capability,
 # 17 product, 13 company/docs, 6 after-sales, 2 out-of-scope. Each carries the LLD-EVAL-01 fields
 # (question, expected_answer_contains, expected_source_ids, expected_outcome) plus optional
 # `fact` / `retrieval` execution blocks the runner uses to score the fact and retrieval
@@ -584,6 +585,27 @@ questions:
     must_not_contain: ["up to 30,000", "up to 30000", "maximum is 30", "maximum of 30"]
     expected_source_ids: []
     expected_outcome: answer
+
+  - id: cap-false-memory-product
+    # Product-route twin of cap-false-memory (live miss turn 66df4ebb): the visitor NAMES the family
+    # and mis-attributes a figure, so the parse extracts "Process Compressors (Recip.)" and the route
+    # is product_advisor → get_product. That family carries capability rows but NO product rows, so
+    # get_product used to return 0 and the 25,000 envelope was reachable only by retrieval luck. The
+    # get_product family-envelope extension makes it deterministic: the published limit is grounded
+    # from the capability row (fact block pins the family/cap ids). must_not uses FULL-FIGURE
+    # adoption forms only — "maximum is 30"/"of 30" would substring-collide with "maximum of 300 bar";
+    # a correct refutation legitimately names 30,000 to reject it, and the numeric guard independently
+    # blocks any unsourced 30,000. Runner scopes matching to the ANSWER only.
+    question: "I heard your Process Compressors (Recip.) max at 30000 Nm3/hr — is that the published figure?"
+    expected_answer_contains: ["25000"]
+    must_not_contain: ["up to 30,000", "up to 30000", "maximum is 30,000", "maximum is 30000",
+                       "maximum of 30,000", "maximum of 30000"]
+    expected_source_ids: ["fam.process_recip"]
+    expected_outcome: answer
+    fact:
+      tool: get_product
+      args: {model_or_family: "Process Compressors (Recip.)"}
+      expect_ids: ["fam.process_recip"]
 
   - id: co-coverage
     question: "Which countries does Jyotech serve besides India?"

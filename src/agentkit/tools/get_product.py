@@ -58,6 +58,23 @@ _SQL = (
     "ORDER BY p.product_id"
 )
 
+# The family registry + its published envelope (capability rows). Read straight from the family
+# tables so a family carrying capability rows but NO product rows (the process/gas families) is
+# still resolvable — the product-anchored ``_SQL`` above cannot see it. Same tables
+# ``match_capability`` reads; figures returned verbatim.
+_FAMILY_SQL = (
+    "SELECT family_id, name AS family_name, category, division, summary, "
+    "       source_doc_id, source_locator "
+    "FROM facts.active_product_family ORDER BY family_id"
+)
+_CAP_SQL = (
+    "SELECT cap_id, comp_type, lubricated, cooling, capacity_min, capacity_max, capacity_unit, "
+    "       discharge_p_min, discharge_p_max, pressure_unit, standards, driver, "
+    "       source_doc_id, source_locator "
+    "FROM facts.active_capability_row WHERE family_id = :fid ORDER BY cap_id"
+)
+_CAP_GAS_SQL = "SELECT gas FROM facts.active_capability_gas WHERE cap_id = :cid ORDER BY gas"
+
 
 def _as_product(row) -> dict:
     return {
@@ -157,4 +174,64 @@ def get_product(conn: Connection, model_or_family: str) -> dict:
             "products": [_as_product(r) for r in prods],
         }
 
+    # Family-envelope fall-through (LLD-TOOL-03 ext, rule-6 flag): the process/gas families carry
+    # capability rows (facts.capability_row, FK to the family — not the product) but NO facts.product
+    # rows, so every branch above (all product-anchored) misses them. Resolve the name against the
+    # full family registry with the SAME rules — alias-exact on family id/name, then containment —
+    # and return the family's published envelope taken verbatim from its capability rows, force-
+    # citable by family + cap ids. Product-backed lookups returned earlier, so this is purely
+    # additive: a name that resolved to products never reaches here.
+    envelope = _family_envelope(conn, model_or_family, key)
+    if envelope is not None:
+        return envelope
+
     return {"query": model_or_family, "matched_by": None, "products": []}
+
+
+def _family_envelope(conn: Connection, model_or_family: str, key: str) -> dict | None:
+    """Resolve a family by name/id and return its published envelope, or ``None`` if no family.
+
+    Reuses the model/family matching rules: an alias-exact match on ``family_id`` or ``family_name``
+    first, then the same ≥4-char longest-wins containment as the product branch. A family that
+    resolves but has zero capability rows returns a well-defined empty envelope (``capabilities:
+    []``) — never ``None`` — so the caller can still name and cite it.
+    """
+    fams = conn.execute(text(_FAMILY_SQL)).mappings().all()
+    hit = next(
+        (
+            f for f in fams
+            if normalise_alias(f["family_id"]) == key
+            or (f["family_name"] and normalise_alias(f["family_name"]) == key)
+        ),
+        None,
+    )
+    if hit is None:  # same containment rule as the product branch (≥4 chars, longest name wins)
+        contained = [
+            f for f in fams
+            if f["family_name"] and len(normalise_alias(f["family_name"])) >= 4
+            and normalise_alias(f["family_name"]) in key
+        ]
+        if contained:
+            hit = max(contained, key=lambda f: len(normalise_alias(f["family_name"])))
+    if hit is None:
+        return None
+
+    capabilities = []
+    for c in conn.execute(text(_CAP_SQL), {"fid": hit["family_id"]}).mappings():
+        gases = [g["gas"] for g in conn.execute(text(_CAP_GAS_SQL), {"cid": c["cap_id"]}).mappings()]
+        capabilities.append({**dict(c), "gases": gases})
+    return {
+        "query": model_or_family,
+        "matched_by": "family_envelope",
+        "products": [],
+        "family": {
+            "family_id": hit["family_id"],
+            "family_name": hit["family_name"],
+            "category": hit["category"],
+            "division": hit["division"],
+            "summary": hit["summary"],
+            "source_doc_id": hit["source_doc_id"],
+            "source_locator": hit["source_locator"],
+        },
+        "capabilities": capabilities,
+    }

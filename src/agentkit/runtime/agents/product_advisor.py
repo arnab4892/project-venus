@@ -169,6 +169,13 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
         if products:
             structured_rec = rec
             scope_family = products[0]["family_id"]
+        elif rec.result.get("matched_by") == "family_envelope":
+            # Capability-only family (process/gas): get_product now returns the family's published
+            # envelope from its capability rows. Use it as the structured source and scope retrieval
+            # to it, so the compose can state the family's published limits (the false-memory /
+            # "what's your max" case) instead of only listing the family name via list_products.
+            structured_rec = rec
+            scope_family = rec.result["family"]["family_id"]
     # Fall back to the division listing whenever no product resolved — a generic ask (null name)
     # OR a name get_product cannot match (e.g. "hydrogen fuelling systems", a family carrying no
     # product rows). This is NOT an `elif`: without the fallback an unresolved name leaves the
@@ -182,7 +189,15 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
 
     # Retrieval query: the family/model name (when known) + the question, scoped to the matched
     # family when we have one, else the division. Best-effort — missing infra ≠ a failure.
-    fam_name = structured_rec.result["products"][0].get("family_name", "") if scope_family else ""
+    # The matched family's name seeds the retrieval query. It lives under products[0] for a product
+    # match, or under the family-envelope block for a capability-only family (products is empty).
+    fam_name = ""
+    if scope_family and structured_rec is not None:
+        _prods = structured_rec.result.get("products") or []
+        fam_name = (
+            _prods[0].get("family_name", "") if _prods
+            else (structured_rec.result.get("family") or {}).get("family_name", "")
+        )
     query = english_query(
         ctx.complete, f"{fam_name} {parse.get('search_query') or latest_user}".strip(), language
     )
