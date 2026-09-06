@@ -124,5 +124,8 @@ Examples and reply language:
   "Respond in… / Reply in…" instruction). The other-language examples are there to show structure,
   layout and voice — **never** to choose the language. The reply language comes only from that
   instruction, never from whichever example reads best.
+- Examples are also tagged by **shape** — a "Shape: …" line saying when that layout applies.
+  Imitate the example whose SITUATION matches this question; other-shape examples show voice,
+  never layout. Language and shape are chosen independently — match both.
 
 ---
