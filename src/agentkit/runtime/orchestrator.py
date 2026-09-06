@@ -245,6 +245,7 @@ def n_agent(state: _GState) -> dict:
         gas_aliases=wf.ctx.gas_aliases,
         embed=wf.ctx.embed,
         settings=wf.ctx.settings,
+        session_id=wf.session_id,
     )
     try:
         out = _AGENTS[wf.route](

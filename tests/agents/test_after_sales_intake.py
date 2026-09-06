@@ -113,3 +113,27 @@ def test_completion_hands_off_with_contact_detail_no_lead_row(seeded_conn, make_
     assert out["intake"]["contact_detail"] == "arnab@example.com"
     # 5b stub: NO ops.lead row is written (milestone 6)
     assert _lead_count(seeded_conn) == 0
+
+
+def test_ask_slot_strips_empty_sources_trailer(seeded_conn, make_ctx, new_session):
+    # Same prompt-hygiene net as application_discovery: a spurious empty "Sources:" trailer on a
+    # slot question is stripped (a question has no citations).
+    fake = FakeLLM(
+        {
+            "triage": _TRIAGE,
+            "after_sales_slots": {
+                "model": "MCH-16", "serial_or_year": None, "site_city": "Kolkata",
+                "need": None, "contact_pref": None,
+                "asked_slot": "serial_or_year",
+                "message": "What's the serial number, or roughly the year it was supplied?\n\nSources: []",
+            },
+        }
+    )
+    ctx = make_ctx(fake)
+    sid = new_session()
+    result = run_turn(ctx, sid, "My MCH-16 needs servicing, we're in Kolkata.")
+
+    assert result.outcome == "asked_slot"
+    text = result.messages[0]["text"]
+    assert "Sources" not in text
+    assert "serial number" in text.lower()

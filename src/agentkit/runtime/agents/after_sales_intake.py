@@ -13,7 +13,7 @@ in 5b — no ``ops.lead`` row is written** (lead capture + email are milestone 6
 from __future__ import annotations
 
 from agentkit.extract.llm import call_json
-from agentkit.runtime.agents.base import AgentOutput
+from agentkit.runtime.agents.base import AgentOutput, strip_empty_sources_trailer
 from agentkit.runtime.language import respond_in
 from agentkit.runtime.ops import MessageRecord
 from agentkit.runtime.schemas import AFTER_SALES_SCHEMA, AFTER_SALES_SLOTS
@@ -73,7 +73,7 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
             # closing line ("All set…") here instead of requesting the email/phone.
             question = _contact_question(slots)
         else:
-            question = raw.get("message") or _SLOT_QUESTIONS[missing]
+            question = strip_empty_sources_trailer(raw.get("message") or "") or _SLOT_QUESTIONS[missing]
         return AgentOutput(
             action="ask_slot",
             messages=[MessageRecord("assistant", "text", question)],

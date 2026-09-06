@@ -9,7 +9,7 @@ turn is still recorded in ``ops`` like any other.
 from __future__ import annotations
 
 from agentkit.extract.llm import call_json
-from agentkit.runtime.agents.base import AgentOutput
+from agentkit.runtime.agents.base import AgentOutput, strip_empty_sources_trailer
 from agentkit.runtime.language import respond_in
 from agentkit.runtime.ops import MessageRecord
 from agentkit.runtime.schemas import DEFLECT_SCHEMA
@@ -30,6 +30,6 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
     )
     return AgentOutput(
         action="deflect",
-        messages=[MessageRecord("assistant", "text", raw.get("message", ""))],
+        messages=[MessageRecord("assistant", "text", strip_empty_sources_trailer(raw.get("message") or ""))],
         output=raw,
     )
