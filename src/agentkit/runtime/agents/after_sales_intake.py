@@ -29,6 +29,32 @@ _SLOT_QUESTIONS = {
 }
 
 
+# Completion close — a FIXED per-language template selected by the turn's detected language
+# (LLD-RT-07), mirroring commercial_routing's `_TEMPLATES` and application_discovery's
+# `_NOMATCH_TEMPLATES`. The visitor's / tool's own values ({model}, {city}, {need},
+# {contact_detail}) and the office name/email stay verbatim even in the hi/hinglish register —
+# they are runtime-filled technical values, not prose to translate. The hi scaffolding is
+# register-pure written Hindi (asserted by the shared `script_purity_offenders` checker on the
+# unfilled template, which strips the `{placeholders}`).
+_CLOSE_TEMPLATES = {
+    "en": (
+        "Thanks — I've noted your {model} in {city} and that you need {need}. Our {office} "
+        "office{contact} looks after your region; I'll pass your details to them and they'll "
+        "reach you on {contact_detail}."
+    ),
+    "hi": (
+        "धन्यवाद — मैंने {city} में आपके {model} को नोट कर लिया है, और यह कि आपको {need} चाहिए। आपके "
+        "क्षेत्र को हमारा {office} कार्यालय{contact} देखता है; मैं आपकी जानकारी उन्हें भेज देता हूँ और वे आपसे "
+        "{contact_detail} पर संपर्क करेंगे।"
+    ),
+    "hinglish": (
+        "Shukriya — maine aapka {model} {city} mein note kar liya hai, aur ki aapko {need} "
+        "chahiye. Aapke region ko hamara {office} office{contact} dekhta hai; main aapki details "
+        "unhe bhej deta hoon aur wo aapse {contact_detail} par contact karenge."
+    ),
+}
+
+
 def _contact_question(slots: dict) -> str:
     """The contact-detail question, phrased for the preference the visitor chose."""
     pref = (slots.get("contact_pref") or "").lower()
@@ -88,10 +114,14 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
     office_city = office.get("city") or slots["site_city"]
     office_email = office.get("email")
     contact = f" ({office_email})" if office_email else ""
-    msg = (
-        f"Thanks — I've noted your {slots['model']} in {slots['site_city']} and that you need "
-        f"{slots['need']}. Our {office_city} office{contact} looks after your region; I'll pass "
-        f"your details to them and they'll reach you on {slots['contact_detail']}."
+    lang = language if language in _CLOSE_TEMPLATES else "en"
+    msg = _CLOSE_TEMPLATES[lang].format(
+        model=slots["model"],
+        city=slots["site_city"],
+        need=slots["need"],
+        office=office_city,
+        contact=contact,
+        contact_detail=slots["contact_detail"],
     )
     return AgentOutput(
         action="handoff",
