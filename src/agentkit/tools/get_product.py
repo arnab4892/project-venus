@@ -17,11 +17,36 @@ from sqlalchemy import Connection, text
 _ALIAS_STRIP_RE = re.compile(r"[\s\-]+")
 _MODEL_PREFIX_RE = re.compile(r"[a-z]+")
 _MODEL_NUM_RE = re.compile(r"\d+")
+# Word-preserving tokeniser for coverage scoring (LLD-TOOL-03, station task): split a name/query
+# into lowercase alnum runs across whitespace / - / / / ( ) / . / & so "MCH-13/16 (Smart Series)"
+# → {mch, 13, 16, smart, series}. Distinct from normalise_alias, which collapses to one blob with
+# no word boundaries — token coverage needs the boundaries to tell "Smart MCH-16" from "MCH-16".
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
 def normalise_alias(value: str) -> str:
     """Strip spaces/hyphens and case-fold for model-number matching (``MCH-16`` → ``mch16``)."""
     return _ALIAS_STRIP_RE.sub("", value).lower()
+
+
+def _tokens(value: str | None) -> frozenset[str]:
+    """Word/number token set for coverage scoring.
+
+    Drops length-1 non-numeric tokens (a stray 'C'/'S') as noise, and folds a single trailing
+    plural 's' on words ≥4 chars ("compressors"→"compressor", "boosters"→"booster") so
+    singular/plural phrasings match. Purely morphological — no domain word list. Numbers are kept
+    verbatim ("16" stays "16").
+    """
+    if not value:
+        return frozenset()
+    out: set[str] = set()
+    for t in _TOKEN_RE.findall(value.lower()):
+        if len(t) < 2 and not t.isdigit():
+            continue
+        if len(t) >= 4 and t.endswith("s") and not t.isdigit():
+            t = t[:-1]
+        out.add(t)
+    return frozenset(out)
 
 
 def _model_tokens(name: str | None) -> tuple[str, frozenset[int]]:
@@ -135,69 +160,13 @@ def get_product(conn: Connection, model_or_family: str) -> dict:
         matched_by = "model" if ranked[0][0][0] == 0 else "model_variant"
         return {"query": model_or_family, "matched_by": matched_by, "products": products}
 
-    by_family = [
-        r
-        for r in rows
-        if normalise_alias(r["family_id"]) == key
-        or (r["family_name"] and normalise_alias(r["family_name"]) == key)
-    ]
-    if by_family:
-        return {"query": model_or_family, "matched_by": "family", "products": [_as_product(r) for r in by_family]}
-
-    # Containment fallback (LLD-TOOL-03, rule-6 flag): a caller often passes the model/family
-    # name embedded in a phrase ("battery powered combi-tool FOR RESCUE", "C-Monitor FOR DIVING").
-    # After exact matches fail, match a product/family whose (≥4-char) normalised name is a
-    # substring of the normalised query — longest name wins, so a specific model beats a generic
-    # family. This never fabricates: it still requires the published name to appear in the query.
-    def _contains(name: str | None) -> bool:
-        n = normalise_alias(name or "")
-        return len(n) >= 4 and n in key
-
-    contained = [
-        (len(normalise_alias(r["model_name"] or "")), "model", r)
-        for r in rows if r["model_name"] and _contains(r["model_name"])
-    ] + [
-        (len(normalise_alias(r["family_name"] or "")), "family", r)
-        for r in rows if r["family_name"] and _contains(r["family_name"])
-    ]
-    if contained:
-        best_len = max(c[0] for c in contained)
-        winners = [c for c in contained if c[0] == best_len]
-        kind = winners[0][1]
-        if kind == "family":
-            fam_id = winners[0][2]["family_id"]
-            prods = [r for r in rows if r["family_id"] == fam_id]
-        else:
-            prods = [c[2] for c in winners]
-        return {
-            "query": model_or_family, "matched_by": f"{kind}_contains",
-            "products": [_as_product(r) for r in prods],
-        }
-
-    # Family-envelope fall-through (LLD-TOOL-03 ext, rule-6 flag): the process/gas families carry
-    # capability rows (facts.capability_row, FK to the family — not the product) but NO facts.product
-    # rows, so every branch above (all product-anchored) misses them. Resolve the name against the
-    # full family registry with the SAME rules — alias-exact on family id/name, then containment —
-    # and return the family's published envelope taken verbatim from its capability rows, force-
-    # citable by family + cap ids. Product-backed lookups returned earlier, so this is purely
-    # additive: a name that resolved to products never reaches here.
-    envelope = _family_envelope(conn, model_or_family, key)
-    if envelope is not None:
-        return envelope
-
-    return {"query": model_or_family, "matched_by": None, "products": []}
-
-
-def _family_envelope(conn: Connection, model_or_family: str, key: str) -> dict | None:
-    """Resolve a family by name/id and return its published envelope, or ``None`` if no family.
-
-    Reuses the model/family matching rules: an alias-exact match on ``family_id`` or ``family_name``
-    first, then the same ≥4-char longest-wins containment as the product branch. A family that
-    resolves but has zero capability rows returns a well-defined empty envelope (``capabilities:
-    []``) — never ``None`` — so the caller can still name and cite it.
-    """
+    # Family resolution over the FULL registry (product-backed + capability-only families). Load
+    # once and share between the exact tier and the token-coverage fallback.
     fams = conn.execute(text(_FAMILY_SQL)).mappings().all()
-    hit = next(
+
+    # Alias-exact on family id or name — the most specific family signal, so it wins outright
+    # (this also covers the capability-only process/gas families, which carry no product rows).
+    exact = next(
         (
             f for f in fams
             if normalise_alias(f["family_id"]) == key
@@ -205,19 +174,92 @@ def _family_envelope(conn: Connection, model_or_family: str, key: str) -> dict |
         ),
         None,
     )
-    if hit is None:  # same containment rule as the product branch (≥4 chars, longest name wins)
-        contained = [
-            f for f in fams
-            if f["family_name"] and len(normalise_alias(f["family_name"])) >= 4
-            and normalise_alias(f["family_name"]) in key
-        ]
-        if contained:
-            hit = max(contained, key=lambda f: len(normalise_alias(f["family_name"])))
-    if hit is None:
-        return None
+    if exact is not None:
+        return _family_result(conn, exact, rows, model_or_family, matched_by="family")
 
+    # Token-coverage fallback (LLD-TOOL-03, station task): replaces raw longest-substring
+    # containment, which matched "MCH-16" inside "Smart MCH-16" and ignored the dangling "Smart".
+    # A candidate family's token bag = its name + its products' model_name/variant; a family is
+    # confident only when it is the UNIQUE family whose covered query tokens are not a strict subset
+    # of another's (Pareto frontier), so the candidate covering the distinguishing token wins.
+    # 2–4 co-maximal candidates ⇒ ambiguous (the caller asks, listing display names); >4 ⇒ too
+    # vague to disambiguate, treated as no match; 0 shared tokens ⇒ no match. Never fabricates.
+    verdict = _token_coverage(model_or_family, rows, fams)
+    if verdict["kind"] == "confident":
+        fam = next(f for f in fams if f["family_id"] == verdict["family_id"])
+        return _family_result(conn, fam, rows, model_or_family, matched_by="family_contains")
+    if verdict["kind"] == "ambiguous":
+        return {
+            "query": model_or_family, "matched_by": "ambiguous",
+            "products": [], "candidates": verdict["candidates"],
+        }
+    return {"query": model_or_family, "matched_by": None, "products": []}
+
+
+def _family_result(
+    conn: Connection, fam, rows, model_or_family: str, *, matched_by: str
+) -> dict:
+    """A resolved family → its product rows if it has any, else its published envelope.
+
+    Product-backed families return ``matched_by`` verbatim (``family``/``family_contains``); a
+    capability-only family (the process/gas lines: capability rows FK the family, no product rows)
+    returns the ``family_envelope`` shape the renderer + citation derivation already understand.
+    """
+    prods = [r for r in rows if r["family_id"] == fam["family_id"]]
+    if prods:
+        return {
+            "query": model_or_family, "matched_by": matched_by,
+            "products": [_as_product(r) for r in prods],
+        }
+    return _envelope(conn, fam, model_or_family)
+
+
+def _token_coverage(model_or_family: str, rows, fams) -> dict:
+    """Score families by covered query tokens; return the confident / ambiguous / none verdict.
+
+    ``{"kind": "confident", "family_id": …}`` when exactly one family sits on the Pareto frontier
+    of covered query tokens (not strictly dominated by any other); ``{"kind": "ambiguous",
+    "candidates": [display names]}`` for 2–4 co-maximal families; ``{"kind": "none"}`` for zero
+    candidates or >4 (too vague to ask). The frontier is Exhibit C's rule made precise: a candidate
+    leaving a query token that a competitor covers is strictly dominated and drops out.
+    """
+    q = _tokens(model_or_family)
+    if not q:
+        return {"kind": "none"}
+    bag: dict[str, set[str]] = {}
+    name: dict[str, str] = {}
+    for f in fams:
+        bag[f["family_id"]] = set(_tokens(f["family_name"]))
+        name[f["family_id"]] = f["family_name"] or f["family_id"]
+    for r in rows:
+        b = bag.setdefault(r["family_id"], set())
+        b |= _tokens(r["model_name"])
+        b |= _tokens(r["variant"])
+        name.setdefault(r["family_id"], r["family_name"] or r["family_id"])
+    covered = {fid: (q & toks) for fid, toks in bag.items()}
+    covered = {fid: c for fid, c in covered.items() if c}
+    if not covered:
+        return {"kind": "none"}
+    # Pareto frontier: families whose covered token set is not a strict subset of another's.
+    frontier = [
+        fid for fid, c in covered.items()
+        if not any(other != fid and c < covered[other] for other in covered)
+    ]
+    if len(frontier) == 1:
+        return {"kind": "confident", "family_id": frontier[0]}
+    if 2 <= len(frontier) <= 4:
+        return {"kind": "ambiguous", "candidates": sorted(name[fid] for fid in frontier)}
+    return {"kind": "none"}
+
+
+def _envelope(conn: Connection, fam, model_or_family: str) -> dict:
+    """Build the ``family_envelope`` result for an already-resolved family row (verbatim figures).
+
+    A family with zero capability rows returns ``capabilities: []`` — never ``None`` — so the
+    caller can still name and cite it.
+    """
     capabilities = []
-    for c in conn.execute(text(_CAP_SQL), {"fid": hit["family_id"]}).mappings():
+    for c in conn.execute(text(_CAP_SQL), {"fid": fam["family_id"]}).mappings():
         gases = [g["gas"] for g in conn.execute(text(_CAP_GAS_SQL), {"cid": c["cap_id"]}).mappings()]
         capabilities.append({**dict(c), "gases": gases})
     return {
@@ -225,13 +267,13 @@ def _family_envelope(conn: Connection, model_or_family: str, key: str) -> dict |
         "matched_by": "family_envelope",
         "products": [],
         "family": {
-            "family_id": hit["family_id"],
-            "family_name": hit["family_name"],
-            "category": hit["category"],
-            "division": hit["division"],
-            "summary": hit["summary"],
-            "source_doc_id": hit["source_doc_id"],
-            "source_locator": hit["source_locator"],
+            "family_id": fam["family_id"],
+            "family_name": fam["family_name"],
+            "category": fam["category"],
+            "division": fam["division"],
+            "summary": fam["summary"],
+            "source_doc_id": fam["source_doc_id"],
+            "source_locator": fam["source_locator"],
         },
         "capabilities": capabilities,
     }
