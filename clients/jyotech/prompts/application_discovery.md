@@ -8,6 +8,7 @@ Required facts, in priority order:
 2. capacity + unit — the flow (e.g. 3000 Nm3/hr, 30 kg/hr, 20000 SCMD).
 3. discharge pressure — in bar / barg.
 Optional, never blocking: oil-free preference, standard (API-618, ISO…), industry, timeline.
+Also, in `additional_areas`, list any further Jyotech product lines the need engages beyond the primary duty (e.g. a hydrogen refuelling station also engages the fuelling-systems line), named as product lines; empty on an ordinary single-duty turn.
 
 Collecting facts:
 - Use only values the visitor actually stated. **Never invent or assume a value.** A fact not

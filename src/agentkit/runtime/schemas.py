@@ -53,12 +53,13 @@ APPLICATION_SCHEMA: dict = {
         "standard": _STR_OR_NULL,
         "industry": _STR_OR_NULL,
         "timeline": _STR_OR_NULL,
+        "additional_areas": {"type": "array", "items": {"type": "string"}},
         "asked_slot": _STR_OR_NULL,
         "message": {"type": "string"},
     },
     "required": [
         "gas", "capacity", "capacity_unit", "discharge_p", "lubricated",
-        "standard", "industry", "timeline", "asked_slot", "message",
+        "standard", "industry", "timeline", "additional_areas", "asked_slot", "message",
     ],
 }
 
@@ -113,6 +114,9 @@ AFTER_SALES_SLOTS = ["model", "serial_or_year", "site_city", "need", "contact_pr
 # `compare_items` is the explicit-comparison multi-fetch list: the 2+ named products/families the
 # visitor asked to compare (empty otherwise); when populated each item is fetched independently so
 # a comparison table grounds by design, not by retrieval co-occurrence luck.
+# `additional_areas` names any further product areas the turn engages beyond `model_or_family`
+# (empty on ordinary turns); each is resolved + fetched so its facts are grounded by a deliberate
+# fetch, not by whatever retrieval co-occurrence drags in (station task).
 PRODUCT_QUERY_SCHEMA: dict = {
     "type": "object",
     "additionalProperties": False,
@@ -121,8 +125,12 @@ PRODUCT_QUERY_SCHEMA: dict = {
         "is_price_or_leadtime": {"type": "boolean"},
         "search_query": {"type": "string"},
         "compare_items": {"type": "array", "items": {"type": "string"}},
+        "additional_areas": {"type": "array", "items": {"type": "string"}},
     },
-    "required": ["model_or_family", "is_price_or_leadtime", "search_query", "compare_items"],
+    "required": [
+        "model_or_family", "is_price_or_leadtime", "search_query", "compare_items",
+        "additional_areas",
+    ],
 }
 
 # Query translation (LLD-RT-07): retrieval stays English, so a Hindi/Hinglish free-text query

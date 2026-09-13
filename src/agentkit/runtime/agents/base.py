@@ -10,17 +10,25 @@ results, citing their ids" step used by the application and FAQ agents.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 
 from agentkit.extract.llm import CompleteFn, call_json
 from agentkit.runtime.format import format_number
-from agentkit.runtime.language import respond_in
+from agentkit.runtime.language import english_query, respond_in
 from agentkit.runtime.ops import MessageRecord, ToolCallRecord
 from agentkit.runtime.schemas import FAQ_SCHEMA
 from agentkit.runtime.triage import build_chat_messages
 
+logger = logging.getLogger(__name__)
+
 _TR_RE = re.compile(r"tr\d+")
+
+# Cap on deliberate per-area fetches added to a turn beyond its primary lookup (station task):
+# bounds extra LLM/DB work while still grounding the handful of areas a question realistically
+# engages. Confident fetches count against it; skipped (ambiguous/unresolved) areas do not.
+_MAX_EXTRA_AREA_FETCHES = 3
 
 
 @dataclass
@@ -148,6 +156,57 @@ def render_tool_context(records: list[ToolCallRecord]) -> str:
         else:
             lines.append(f"[{rec.tr_id}] {rec.tool} :: {_truncate(json.dumps(r, default=str))}")
     return "\n".join(lines) if lines else "(no tool results)"
+
+
+def ground_additional_areas(
+    tools, complete: CompleteFn, latest_user: str, language: str, areas, *, division
+) -> tuple[list, list[dict]]:
+    """Deliberately fetch each extra product area a turn engages, so its facts are grounded by a
+    fetch — not by whatever retrieval co-occurrence drags in (station task, mirrors the compare
+    path). For each area (deduped, capped at :data:`_MAX_EXTRA_AREA_FETCHES` confident fetches):
+
+    * confident resolution → keep the ``get_product`` record (force-cited by the caller) and add a
+      family-scoped ``search_documents`` for its supporting prose;
+    * ambiguous (2–4 co-maximal families) or unresolved → **skipped**, recorded for ops visibility.
+
+    Fail-open throughout (SAVEPOINT idiom): a resolver/fetch error skips that area's extra
+    grounding, never the turn. Returns ``(fetched_recs, skipped)`` where ``skipped`` is a list of
+    ``{"area", "candidates"}`` (candidates is the ambiguous option names, or ``None`` if unresolved)
+    so silently-skipped areas stay visible in the invocation output, not invisible.
+    """
+    fetched: list = []
+    skipped: list[dict] = []
+    seen: set[str] = set()
+    for area in areas or []:
+        a = (area or "").strip()
+        if not a or a.lower() in seen:
+            continue
+        seen.add(a.lower())
+        if len(fetched) >= _MAX_EXTRA_AREA_FETCHES:
+            break
+        try:
+            rec = tools.get_product(a)
+        except Exception:  # noqa: BLE001 - a convenience fetch never breaks the turn
+            logger.info("additional-area: get_product failed for %r; skipped", a, exc_info=True)
+            continue
+        res = rec.result
+        if res.get("matched_by") == "ambiguous":
+            skipped.append({"area": a, "candidates": res.get("candidates")})
+            logger.info("additional-area: %r ambiguous %s; skipped (fail-open)", a, res.get("candidates"))
+            continue
+        products = res.get("products") or []
+        fam = products[0]["family_id"] if products else (res.get("family") or {}).get("family_id")
+        if fam is None:
+            skipped.append({"area": a, "candidates": None})
+            logger.info("additional-area: %r unresolved; skipped", a)
+            continue
+        fetched.append(rec)
+        try:
+            q = english_query(complete, f"{a} specifications", language)
+            tools.search_documents(q, family_ids=[fam], k=3)
+        except Exception:  # noqa: BLE001 - missing retrieval infra ≠ a failure
+            pass
+    return fetched, skipped
 
 
 def normalise_citations(raw: list[str]) -> list[str]:

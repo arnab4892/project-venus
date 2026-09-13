@@ -17,7 +17,11 @@ The query passed to ``search_documents`` is English even for a Hindi/Hinglish me
 from __future__ import annotations
 
 from agentkit.extract.llm import call_json
-from agentkit.runtime.agents.base import AgentOutput, compose_grounded_answer
+from agentkit.runtime.agents.base import (
+    AgentOutput,
+    compose_grounded_answer,
+    ground_additional_areas,
+)
 from agentkit.runtime.language import english_query
 from agentkit.runtime.ops import MessageRecord
 from agentkit.runtime.schemas import PRODUCT_QUERY_SCHEMA
@@ -60,7 +64,21 @@ _PARSE_SYSTEM = (
     "products/families ('compare X and Y', 'X vs Y', 'difference between X and Y'), the list of "
     "those exact product/family names (2–4 items, generic words removed as above); an empty list "
     "otherwise. A single product with sibling variants is NOT a comparison — leave it empty and "
-    "put the product in model_or_family."
+    "put the product in model_or_family.\n"
+    "- additional_areas: Jyotech product lines this turn engages that are NOT already model_or_family "
+    "— the lines an application implies (a hydrogen refuelling station → 'hydrogen fuelling systems') "
+    "AND, when model_or_family is null, the specific line the visitor is centrally asking about "
+    "('what natural gas compressors do you offer' → 'natural gas compressors'). Empty only for a "
+    "broad 'what do you make' ask that names no specific line."
+)
+
+# One-question disambiguation when the visitor's named product matches 2–4 product lines and no
+# single line dominates (station task). The LLM phrases the question; the exact option names are
+# supplied here so the reply carries the real display names, never an invented one.
+_CLARIFY_INSTRUCTION = (
+    "The visitor's request matches more than one of our product lines: {names}. Do NOT describe, "
+    "spec or compare them. Ask ONE short question, in the visitor's language, inviting them to say "
+    "which of these lines they mean — naming each option exactly as written above and nothing else."
 )
 
 # Compose directive for the explicit-comparison table (LLD-AG-02 presentation). Rows carry the
@@ -165,6 +183,26 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
     scope_family = None
     if model_or_family:
         rec = tools.get_product(model_or_family)
+        # Ambiguous PRIMARY name (2–4 co-maximal lines, none dominant) → ask ONE question naming the
+        # candidate lines, rather than fetching a wrong-but-nonempty record (Exhibit C). Composed by
+        # the LLM but carrying the real display names. One-question-per-turn: only the customer's own
+        # named product asks; ambiguous additional_areas skip silently below.
+        if rec.result.get("matched_by") == "ambiguous":
+            candidates = rec.result.get("candidates") or []
+            message, _ = compose_grounded_answer(
+                complete=ctx.complete,
+                prompt_body=prompt_body,
+                history=history,
+                latest_user=latest_user,
+                records=[],
+                language=language,
+                extra_instruction=_CLARIFY_INSTRUCTION.format(names=", ".join(candidates)),
+            )
+            return AgentOutput(
+                action="clarify",
+                messages=[MessageRecord("assistant", "text", message)],
+                output={"action": "clarify", "ambiguous_candidates": candidates},
+            )
         products = rec.result.get("products") or []
         if products:
             structured_rec = rec
@@ -209,6 +247,14 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
     except Exception:  # noqa: BLE001 - missing retrieval infra ≠ a failure
         pass
 
+    # Deliberately ground any further product areas the turn engages beyond the primary lookup
+    # (station task) — each resolved + family-scoped-searched like the compare path; ambiguous or
+    # unresolved areas skip (fail-open) and are surfaced in the output for ops review.
+    area_recs, skipped_areas = ground_additional_areas(
+        tools, ctx.complete, latest_user, language,
+        parse.get("additional_areas"), division=division,
+    )
+
     message, citations = compose_grounded_answer(
         complete=ctx.complete,
         prompt_body=prompt_body,
@@ -231,9 +277,17 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
     # forgets to list it (honest — the tool WAS used, not an unused source).
     if structured_rec is not None and structured_rec.tr_id not in citations:
         citations.append(structured_rec.tr_id)
+    # Force-cite each additional-area fetch too, so a deliberately-grounded area is cited by design
+    # (its facts came from the fetch, not retrieval luck) even if the compose LLM omits it.
+    for rec in area_recs:
+        if rec.tr_id not in citations:
+            citations.append(rec.tr_id)
+    output = {"action": "answer", "model_or_family": model_or_family}
+    if skipped_areas:
+        output["skipped_areas"] = skipped_areas
     return AgentOutput(
         action="answer",
         draft_text=message,
         citations=citations,
-        output={"action": "answer", "model_or_family": model_or_family},
+        output=output,
     )

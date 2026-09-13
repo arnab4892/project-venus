@@ -27,6 +27,7 @@ from agentkit.extract.llm import call_json
 from agentkit.runtime.agents.base import (
     AgentOutput,
     compose_grounded_answer,
+    ground_additional_areas,
     strip_empty_sources_trailer,
 )
 from agentkit.runtime.format import format_number
@@ -152,7 +153,7 @@ def _guard_inferred_filters(slots: dict, latest_user: str, history: list[dict]) 
 
 def _extract_slots(raw: dict) -> dict:
     keys = ["gas", "capacity", "capacity_unit", "discharge_p", "lubricated", "standard",
-            "industry", "timeline"]
+            "industry", "timeline", "additional_areas"]
     return {k: raw.get(k) for k in keys if raw.get(k) is not None}
 
 
@@ -412,6 +413,16 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
     except Exception:  # noqa: BLE001 - retrieval infra missing ≠ a match failure
         pass
 
+    # Deliberately ground any further product areas the turn engages beyond the matched duty
+    # (station task) — e.g. a follow-up "this is for a hydrogen refuelling station, what do you
+    # offer there?" fetches the fuelling family so its facts are cited, not merely co-occurring in a
+    # chunk. Fail-open; ambiguous/unresolved areas skip and are surfaced in the output.
+    area_recs, skipped_areas = ground_additional_areas(
+        tools, ctx.complete, latest_user, language,
+        slots.get("additional_areas"),
+        division=triage.get("division") if triage.get("division") != "unknown" else None,
+    )
+
     # Restate the exact (merged) duty so any value carried over from an earlier turn is visible and
     # correctable (Fix 1b). The duty figures are the visitor's own flow + the tool-args pressure, so
     # the numeric guard permits them.
@@ -483,6 +494,10 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
     # IS what the answer is built on). Its cap + family ids flow through the grounding gate.
     if match_rec.tr_id not in citations:
         citations.append(match_rec.tr_id)
+    # Force-cite each additional-area fetch so a deliberately-grounded area is cited by design.
+    for rec in area_recs:
+        if rec.tr_id not in citations:
+            citations.append(rec.tr_id)
     return AgentOutput(
         action="answer",
         draft_text=message,
@@ -493,5 +508,6 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
             "matched_family_id": top["family_id"],
             "near_edge": top.get("near_edge"),
             **({"stripped_slots": stripped_slots} if stripped_slots else {}),
+            **({"skipped_areas": skipped_areas} if skipped_areas else {}),
         },
     )
