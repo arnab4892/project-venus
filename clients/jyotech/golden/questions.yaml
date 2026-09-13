@@ -1,11 +1,13 @@
-# Golden question suite (LLD-EVAL-01). 59 questions (the initial 40 + a 6-question Gate-2
+# Golden question suite (LLD-EVAL-01). 60 questions (the initial 40 + a 6-question Gate-2
 # extension + prod-mch16-specs + adversarial-round faq-eiga / faq-founder / cap-false-memory +
 # cap-wellhead-natgas + the faq-api618 machine-standards routing regression + the polish-pass
 # docs-both-catalogues multi-card golden + the PRD-F-012 Hindi pair e2e-hindi-hydrogen /
 # e2e-hindi-price + the presentation-shapes trio prod-overview-industrial /
 # prod-compare-process-natgas / prod-overview-industrial-hi + cap-false-memory-product, the
-# product-route envelope-lookup twin): 21 capability,
-# 17 product, 13 company/docs, 6 after-sales, 2 out-of-scope. Each carries the LLD-EVAL-01 fields
+# product-route envelope-lookup twin + the presentation-intelligence two-part shape golden
+# faq-founded-and-founder, with co-founded strengthened to a single-fact no-table shape guard):
+# 21 capability,
+# 17 product, 14 company/docs, 6 after-sales, 2 out-of-scope. Each carries the LLD-EVAL-01 fields
 # (question, expected_answer_contains, expected_source_ids, expected_outcome) plus optional
 # `fact` / `retrieval` execution blocks the runner uses to score the fact and retrieval
 # layers against the LIVE active release. The e2e (agent-answer) layer is reported "pending"
@@ -533,12 +535,36 @@ questions:
   - id: co-founded
     question: "When was Jyotech founded?"
     expected_answer_contains: ["199"]
+    # Shape guard (presentation-intelligence): a single fact is answered in plain prose, never a
+    # table. A Markdown pipe proves a table rendered (persona prose never emits `|`) — the same
+    # deterministic anchor prod-compare-process-natgas uses in the positive; here it is the
+    # negative. Robust to LLM variance, no retrieval luck (`199` unchanged, conflict-safe).
+    must_not_contain: ["|"]
     expected_source_ids: ["cf.doc_about_s000.0"]
     expected_outcome: answer
     fact:
       tool: get_company_fact
       args: {kind: founded}
       expect_ids: ["cf.doc_about_s000.0"]
+
+  - id: faq-founded-and-founder
+    # Shape guard (presentation-intelligence): a two-part question is answered part-by-part in
+    # ordered prose passages, never folded and never a table. Anchors: the founder NAME (the
+    # second part — deterministic, grounded on the founder company_fact) AND `199` for the year
+    # part — handled EXACTLY as the green co-founded golden does, i.e. the loose `199` prefix that
+    # does NOT strictly assert 1990-vs-1991 (a known unresolved web/catalogue data conflict). Both
+    # substrings present proves BOTH parts were answered; `must_not "|"` proves ordered prose, not
+    # a table. No retrieval luck: both facts are independently golden-proven (co-founded /
+    # faq-founder). The ORDERING and the spec-block shapes stay live-check-guarded — see notes.
+    question: "When was Jyotech founded, and who founded it?"
+    expected_answer_contains: ["199", "Deepak Bhatia"]
+    must_not_contain: ["|"]
+    expected_source_ids: ["cf.doc_about_s000.1"]
+    expected_outcome: answer
+    fact:
+      tool: get_company_fact
+      args: {kind: founder}
+      expect_ids: ["cf.doc_about_s000.1"]
 
   - id: faq-eiga
     # Adversarial round: a compliance question the product name list can't answer — the agent must

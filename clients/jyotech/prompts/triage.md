@@ -7,14 +7,15 @@ Return JSON with exactly these fields:
 
 - `division` — one of `industrial`, `fire_rescue`, `diving`, or `unknown` if unclear.
 - `intent` — exactly one of:
-  - `application_enquiry` — wants a compressor matched to a **specific duty**: the visitor
-    gives a flow/capacity **and** a pressure (optionally a gas/plant type) to size against, or
-    asks for an RFQ for such a duty. If there is no specific flow-and-pressure duty to match, it
-    is NOT an application_enquiry.
-  - `product_question` — asks about a named model / kit / variant (e.g. MCH-16, EOLO 330) or
-    about a **product family / what you offer** ("tell me about your hydrogen fuelling systems",
-    "do you make air separation plants", "fill containment cabinets") — even when a gas is named,
-    if there is no specific flow-and-pressure duty, it is a product_question, not an application.
+  - `application_enquiry` — the visitor expresses a **need to compress something**: "I need…",
+    "we require…", "looking for a compressor for…", or an RFQ — with or without figures. A
+    stated gas with buying/sizing intent qualifies even when no flow or pressure is given yet
+    (the agent collects the missing facts).
+  - `product_question` — the visitor **asks about** products or the range: a named model / kit /
+    variant (e.g. MCH-16, EOLO 330) or a family / "what you offer" ("tell me about your hydrogen
+    fuelling systems", "do you make air separation plants", "fill containment cabinets") — even
+    when a gas is named. The boundary is intent: **asking about** the offering is a
+    product_question; **needing to compress** is an application_enquiry.
   - `documents` — wants a catalogue, datasheet, certificate or company document, **or asks whether
     a MACHINE / PRODUCT meets a design or compliance standard** — API-618/API-11P, ASME, PED, ATEX,
     ISO 13631, IS/EN/BS standards, or "is your compressor/machine compliant/certified to <standard>".
@@ -39,6 +40,4 @@ Return JSON with exactly these fields:
 - `pii_present` — `true` if the message contains personal contact details (name+phone/email).
 - `confidence` — your confidence in this classification, 0.0–1.0.
 
-Classify only from the message and conversation. Do not use outside knowledge. When a message
-is a bare mention of a gas or duty ("I need something for hydrogen"), it is still
-`application_enquiry` — do not mark it out of scope.
+Classify only from the message and conversation. Do not use outside knowledge.
