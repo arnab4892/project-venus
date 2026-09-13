@@ -1,13 +1,15 @@
-# Golden question suite (LLD-EVAL-01). 60 questions (the initial 40 + a 6-question Gate-2
+# Golden question suite (LLD-EVAL-01). 62 questions (the initial 40 + a 6-question Gate-2
 # extension + prod-mch16-specs + adversarial-round faq-eiga / faq-founder / cap-false-memory +
 # cap-wellhead-natgas + the faq-api618 machine-standards routing regression + the polish-pass
 # docs-both-catalogues multi-card golden + the PRD-F-012 Hindi pair e2e-hindi-hydrogen /
 # e2e-hindi-price + the presentation-shapes trio prod-overview-industrial /
 # prod-compare-process-natgas / prod-overview-industrial-hi + cap-false-memory-product, the
 # product-route envelope-lookup twin + the presentation-intelligence two-part shape golden
-# faq-founded-and-founder, with co-founded strengthened to a single-fact no-table shape guard):
-# 21 capability,
-# 17 product, 14 company/docs, 6 after-sales, 2 out-of-scope. Each carries the LLD-EVAL-01 fields
+# faq-founded-and-founder, with co-founded strengthened to a single-fact no-table shape guard;
+# + the station-task pair cap-station-hydrogen-fuelling (per-area application fetch, luck-proof via
+# the capability-row citation) and prod-compare-smart-ergo-mch16 (variant name resolution, Exhibit
+# C, each variant's own family id)): 21 capability,
+# 19 product, 14 company/docs, 6 after-sales, 2 out-of-scope. Each carries the LLD-EVAL-01 fields
 # (question, expected_answer_contains, expected_source_ids, expected_outcome) plus optional
 # `fact` / `retrieval` execution blocks the runner uses to score the fact and retrieval
 # layers against the LIVE active release. The e2e (agent-answer) layer is reported "pending"
@@ -793,3 +795,29 @@ questions:
     expected_answer_contains: []
     expected_source_ids: []
     expected_outcome: out_of_scope
+
+  # ---- station task: per-area grounding + variant name resolution (2) --------
+  - id: cap-station-hydrogen-fuelling
+    # Station task (Exhibit A): an APPLICATION phrase must deliberately FETCH the fuelling family,
+    # not merely co-occur with it in a chunk. product_advisor writes the engaged line into
+    # additional_areas → get_product resolves the capability-only family → its capability rows are
+    # fetched and cited. The capability-row id is the luck-proof anchor: chunks can wander, but
+    # cap.doc_hydrogen_compressors_and_fueling_system_s000.1 is cited ONLY if the fetch happened;
+    # "J2601" is that row's published standard. Proven by the live single-turn trace.
+    question: "What do you offer for a hydrogen refuelling station?"
+    expected_answer_contains: ["J2601", "fuelling"]
+    expected_source_ids: ["fam.hydrogen_fuelling_system",
+                          "cap.doc_hydrogen_compressors_and_fueling_system_s000.1"]
+    expected_outcome: answer
+
+  - id: prod-compare-smart-ergo-mch16
+    # Station task (Exhibit C): variant nicknames must each resolve to their OWN family via token
+    # coverage, never collapse to the engine MCH-16 by substring containment. The two DISTINCT
+    # variant family ids prove each item fetched its own record; the pipe proves a Markdown table;
+    # the must_not guards the false "same family" claim our data contradicts (mch_smart_bac vs
+    # mch_ergo_bac). Proven by the live trace (get_product per item → distinct families).
+    question: "compare smart mch 16 and ergo mch 16"
+    expected_answer_contains: ["|"]
+    must_not_contain: ["same family"]
+    expected_source_ids: ["fam.mch_smart_bac", "fam.mch_ergo_bac"]
+    expected_outcome: answer
