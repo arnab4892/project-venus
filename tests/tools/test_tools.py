@@ -9,7 +9,12 @@ from sqlalchemy import text
 
 from agentkit.tools.get_company_fact import get_company_fact
 from agentkit.tools.get_office import get_office
-from agentkit.tools.get_product import get_product, normalise_alias, product_display_name
+from agentkit.tools.get_product import (
+    _token_coverage,
+    get_product,
+    normalise_alias,
+    product_display_name,
+)
 from agentkit.tools.list_products import list_products
 
 
@@ -65,14 +70,83 @@ def test_get_product_returns_all_matching_variants_ranked(seeded_conn):
     assert "prd.mch2230" not in ids   # a different MCH number is not pulled in
 
 
-def test_get_product_containment_matches_name_in_a_phrase(seeded_conn):
-    # A caller may pass the model embedded in a phrase; after exact matches fail, a ≥4-char
-    # published name that is a substring of the query matches (longest wins) — never fabricated.
+def test_get_product_token_coverage_resolves_a_phrase_to_its_family(seeded_conn):
+    # A caller may pass a name embedded in a phrase; after exact/sibling matches fail, token
+    # coverage (LLD-TOOL-03, station task) resolves it to the FAMILY whose name + product tokens
+    # cover the query — grounding the family, not one product. Never fabricates: an unrelated
+    # phrase, sharing no published token, still matches nothing.
     result = get_product(seeded_conn, "the MCH-6 breathing air compressor for fire stations")
-    assert result["matched_by"] == "model_contains"
-    assert [p["product_id"] for p in result["products"]] == ["prd.mch6"]
-    # a phrase with no published name still matches nothing
+    assert result["matched_by"] == "family_contains"
+    fam_ids = {p["family_id"] for p in result["products"]}
+    assert fam_ids == {"fam.mch_bac"}
+    assert "prd.mch6" in {p["product_id"] for p in result["products"]}
+    # a phrase with no published token still matches nothing
     assert get_product(seeded_conn, "some unrelated widget")["matched_by"] is None
+
+
+def _fam(fid, name):
+    return {"family_id": fid, "family_name": name}
+
+
+def _prod(fid, model, variant=None):
+    return {"family_id": fid, "model_name": model, "variant": variant, "family_name": None}
+
+
+def test_token_coverage_confident_unique_dominator():
+    # "natural gas compressors" — one family covers the most tokens and dominates the rest.
+    fams = [
+        _fam("fam.ng", "Natural Gas Compressors (Motor & Gas Engine Driven)"),
+        _fam("fam.proc", "Process Compressors (Recip.)"),
+        _fam("fam.dia", "Diaphragm Compressors"),
+    ]
+    v = _token_coverage("natural gas compressors", [], fams)
+    assert v == {"kind": "confident", "family_id": "fam.ng"}
+
+
+def test_token_coverage_rejects_dangling_token_exhibit_c():
+    # "Smart MCH-16": the engine family covers {mch,16} but leaves "smart" dangling; the Smart
+    # family covers {smart,mch,16} and strictly dominates it → confident Smart, never the engine.
+    fams = [
+        _fam("fam.engine", "MCH-16 Engine (Petrol / Diesel)"),
+        _fam("fam.smart", "MCH-13/16 Electric (Smart Series)"),
+        _fam("fam.ergo", "MCH-13/16 & 21/23 Electric (Ergo Series)"),
+    ]
+    assert _token_coverage("Smart MCH-16", [], fams) == {"kind": "confident", "family_id": "fam.smart"}
+    assert _token_coverage("Ergo MCH-16", [], fams) == {"kind": "confident", "family_id": "fam.ergo"}
+
+
+def test_token_coverage_ambiguous_two_to_four_co_maximal():
+    # "CNG boosters": two families co-cover {cng,booster}; neither dominates → ambiguous, listing
+    # both display names (plural folded so "boosters" == "booster").
+    fams = [
+        _fam("fam.hyd", "Hydraulic CNG Boosters"),
+        _fam("fam.por", "Portable CNG Boosters"),
+        _fam("fam.onl", "Online CNG Compressors"),
+    ]
+    v = _token_coverage("CNG boosters", [], fams)
+    assert v["kind"] == "ambiguous"
+    assert v["candidates"] == ["Hydraulic CNG Boosters", "Portable CNG Boosters"]
+
+
+def test_token_coverage_over_four_co_maximal_is_no_match():
+    # A vague query many families tie on ("compressors") is too broad to disambiguate → no match,
+    # so the caller falls back to its normal overview/list path rather than asking.
+    fams = [_fam(f"fam.{i}", f"Type {i} Compressors") for i in range(6)]
+    assert _token_coverage("compressors", [], fams) == {"kind": "none"}
+
+
+def test_token_coverage_uses_product_variant_tokens():
+    # A family whose distinguishing word lives in a product VARIANT (not the family name) is still
+    # reachable — the candidate token bag unions family name + product model_name + variant.
+    fams = [_fam("fam.a", "MCH Electric"), _fam("fam.b", "MCH Electric")]
+    rows = [_prod("fam.a", "MCH-13/16 Electric", "Smart Series"),
+            _prod("fam.b", "MCH-13/16 Electric", "Ergo Series")]
+    assert _token_coverage("smart mch", rows, fams) == {"kind": "confident", "family_id": "fam.a"}
+
+
+def test_token_coverage_no_shared_token_is_no_match():
+    fams = [_fam("fam.a", "Hydrogen Compressors")]
+    assert _token_coverage("diving mask", [], fams) == {"kind": "none"}
 
 
 def test_get_product_null_model_from_db(seeded_conn):

@@ -7,14 +7,69 @@ variant (LLD-EXT-06). Runs full turns on the seeded demo release with the ``comp
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 from tests.runtime._helpers import FakeLLM
 
 from agentkit.config import Settings
 from agentkit.retrieval.chunk import Chunk
 from agentkit.retrieval.embed import embed_chunks
+from agentkit.runtime.agents import product_advisor
+from agentkit.runtime.ops import ToolCallRecord
 from agentkit.runtime.orchestrator import run_turn
 from sqlalchemy import text
+
+
+class _AmbiguousTools:
+    """Minimal tools stub whose ``get_product`` returns an ambiguous verdict (2–4 co-maximal
+    families). The clarify branch calls only ``get_product`` and then composes with ``records=[]``,
+    so nothing else needs stubbing; ``calls`` records the resolver queries for assertions."""
+
+    def __init__(self, candidates: list[str]):
+        self._candidates = candidates
+        self.records: list[ToolCallRecord] = []
+        self.calls: list[str] = []
+
+    def get_product(self, name: str) -> ToolCallRecord:
+        self.calls.append(name)
+        rec = ToolCallRecord(
+            tr_id="tr1", tool="get_product", args={"model_or_family": name},
+            result={"query": name, "matched_by": "ambiguous", "products": [],
+                    "candidates": self._candidates},
+            rows_returned=0, latency_ms=1,
+        )
+        self.records.append(rec)
+        return rec
+
+
+def test_product_advisor_ambiguous_primary_asks_clarify():
+    # Station task: an ambiguous PRIMARY name (2–4 co-maximal lines) asks ONE question naming the
+    # candidate display names, rather than fetching a wrong-but-nonempty record. It must NOT fall
+    # through to a product fetch / overview — exactly one get_product (the primary) is called.
+    candidates = ["Hydraulic CNG Boosters", "Portable CNG Boosters"]
+    fake = FakeLLM({
+        "product_query": {
+            "model_or_family": "CNG boosters", "is_price_or_leadtime": False,
+            "search_query": "CNG boosters", "compare_items": [], "additional_areas": [],
+        },
+        "answer": {
+            "message": "Did you mean our Hydraulic CNG Boosters or our Portable CNG Boosters?",
+            "citations": [],
+        },
+    })
+    out = product_advisor.run(
+        SimpleNamespace(complete=fake),
+        prompt_body="You are the product advisor.",
+        triage={"language": "en", "division": "industrial"},
+        history=[],
+        latest_user="What CNG boosters do you offer?",
+        tools=(tools := _AmbiguousTools(candidates)),
+    )
+    assert out.action == "clarify"
+    assert out.output == {"action": "clarify", "ambiguous_candidates": candidates}
+    assert tools.calls == ["CNG boosters"]  # only the primary resolve; no fetch/overview after
+    assert "Hydraulic CNG Boosters" in out.messages[0].text
+    assert "Portable CNG Boosters" in out.messages[0].text
 
 _SETTINGS = Settings(embed_dim=3, embed_batch=64, embed_model="bge-m3")
 
