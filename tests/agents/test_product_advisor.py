@@ -322,6 +322,27 @@ def test_compare_family_level_grounds_via_listing(seeded_conn, make_ctx, new_ses
     assert {"fam.oxygen_recip", "fam.natgas_hbo"} <= fams
 
 
+def test_compare_per_item_fetch_is_division_independent(seeded_conn, make_ctx, new_session):
+    # Regression (turn 80bda617): a compare where triage guessed division=unknown used to collapse
+    # to a bare search + a declined side-by-side, because the multi-fetch was guarded by "no
+    # division → standard path". Post-PR #16 the per-item resolver + family envelope ground each
+    # named item without a listing, so the compare branch now gates on the two items ALONE. With
+    # division=unknown (→ None) both named products are still fetched per item and each family is
+    # force-cited; the division listing is NOT fetched (it is additive, only when division is real).
+    ctx = make_ctx(_compare_fake("unknown", ["MCH-6", "VEGA"]))
+    sid = new_session()
+    result = run_turn(ctx, sid, "Compare the MCH-6 and the VEGA lifting bag.")
+
+    assert result.outcome == "answered"
+    # per-item get_product still runs for BOTH items despite division=None...
+    assert len(_tool_results(seeded_conn, sid, "get_product")) == 2
+    # ...and the division listing is NOT fetched (no real division to scope it to)
+    assert _tool_results(seeded_conn, sid, "list_products") == []
+    # each compared item's family is still grounded, from the per-item force-cite (not the listing)
+    fams = {c["ref_id"] for c in result.citations if c["kind"] == "family"}
+    assert {"fam.mch_bac", "fam.lifting_bags"} <= fams
+
+
 def test_single_product_path_unchanged_when_no_compare_items(seeded_conn, make_ctx, new_session):
     # A normal single-product ask (compare_items empty via the default fake) still routes through
     # get_product once — the multi-fetch branch does not fire (guards the fallthrough).

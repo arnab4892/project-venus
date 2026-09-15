@@ -126,13 +126,17 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
     # compared item BY DESIGN, not by retrieval co-occurrence luck: a structured lookup per item
     # plus a TARGETED retrieval per item so each item's own specs surface and are citable to its
     # own source. Product-level items (a model with rows, e.g. MCH-16) resolve via get_product and
-    # scope their search to the matched family; family-level items (the process / gas families
-    # carry capability rows but NO product rows, so get_product can't see them) are grounded by the
-    # division listing and searched division-scoped on the item name. Fewer than two items, or no
-    # division, → fall through to the standard single/overview path (co-occurrence fallback,
-    # unchanged). The listing is force-cited so every compared family is grounded per item.
+    # scope their search to the matched family. The per-item grounding is division-INDEPENDENT:
+    # post-PR #16 the shared token-coverage resolver + family envelope ground any item without a
+    # listing, so a run gates on the two named items alone, never on triage's per-run division
+    # guess (which used to flip the same comparison between the two-column table and a decline).
+    # The division listing is ADDITIVE grounding for family-level items (the process / gas families
+    # carry capability rows but NO product rows) and is fetched only when triage carries a real
+    # division; it is force-cited when present so every family-level item stays grounded. Fewer
+    # than two items → fall through to the standard single/overview path (co-occurrence fallback,
+    # unchanged).
     compare_items = [c.strip() for c in (parse.get("compare_items") or []) if c and c.strip()][:4]
-    if len(compare_items) >= 2 and division is not None:
+    if len(compare_items) >= 2:
         item_family: dict[str, str] = {}
         structured_recs = []
         for item in compare_items:
@@ -141,7 +145,7 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
             if prods:
                 structured_recs.append(rec)
                 item_family[item] = prods[0]["family_id"]
-        listing_rec = tools.list_products(division)
+        listing_rec = tools.list_products(division) if division is not None else None
         for item in compare_items:
             q = english_query(ctx.complete, f"{item} specifications", language)
             fam = item_family.get(item)
@@ -161,9 +165,10 @@ def run(ctx, *, prompt_body, triage, history, latest_user, tools) -> AgentOutput
             language=language,
             extra_instruction=_COMPARE_INSTRUCTION,
         )
-        # Force-cite each item's structured lookup + the division listing, so every compared
-        # family is grounded (a citation per compared item), not left to the compose LLM.
-        for rec in [*structured_recs, listing_rec]:
+        # Force-cite each item's structured lookup + the division listing (when fetched), so every
+        # compared item is grounded (a citation per resolved item), not left to the compose LLM.
+        force_cite = [*structured_recs, *([listing_rec] if listing_rec is not None else [])]
+        for rec in force_cite:
             if rec.tr_id not in citations:
                 citations.append(rec.tr_id)
         return AgentOutput(
